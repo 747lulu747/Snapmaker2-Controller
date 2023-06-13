@@ -336,6 +336,8 @@ void QuickStopService::EmergencyStop() {
       break;
     case MACHINE_TYPE_LASER:
     case MACHINE_TYPE_LASER_10W:
+    case MACHINE_TYPE_LASER_20W:
+    case MACHINE_TYPE_LASER_40W:
       laser->SetCameraLight(0);
       laser->SetFanPower(0);
       break;

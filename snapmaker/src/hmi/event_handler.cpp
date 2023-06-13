@@ -753,6 +753,22 @@ static ErrCode HmiRequestGetActiveExtruder(SSTP_Event_t &event) {
   return printer1->HmiRequestGetActiveExtruder(event);
 }
 
+static ErrCode SetCrossLight(SSTP_Event_t &event) {
+  return laser->SetCrossLight(event);
+}
+
+static ErrCode GetCrossLight(SSTP_Event_t &event) {
+  return laser->GetCrossLight(event);
+}
+
+static ErrCode SetFireDetectSensitivity(SSTP_Event_t &event) {
+  return laser->SetFireDetectSensitivity(event);
+}
+
+static ErrCode GetFireDetectSensitivity(SSTP_Event_t &event) {
+  return laser->GetFireDetectSensitivity(event);
+}
+
 EventCallback_t settings_event_cb[SETTINGS_OPC_MAX] = {
   UNDEFINED_CALLBACK,
   /* SETTINGS_OPC_SET_MACHINE_SIZE */ UNDEFINED_CALLBACK,
@@ -793,6 +809,11 @@ EventCallback_t settings_event_cb[SETTINGS_OPC_MAX] = {
   /* [SETTINGS_OPC_SET_DUALEXTRUDER_MANUAL_LEVELING_POINT]  =  */{EVENT_ATTR_HAVE_MOTION,    HmiSetDualExtruderManualLevelingPoint},
   /* [SETTINGS_OPC_FINISH_DUALEXTRUDER_MANUAL_LEVELING]     =  */{EVENT_ATTR_HAVE_MOTION,    HmiFinishDualExtruderManualLeveling},
   /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    HmiRequestGetActiveExtruder},
+
+  /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    SetCrossLight},
+  /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    GetCrossLight},
+  /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    SetFireDetectSensitivity},
+  /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    GetFireDetectSensitivity},
 };
 
 
