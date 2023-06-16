@@ -133,7 +133,8 @@ void GcodeSuite::get_destination_from_command() {
   if (parser.seen('P'))
     power = parser.value_float();
   else if (parser.seen('S'))
-    power = parser.value_float() * 100.0f / 255.0f;
+    // power = parser.value_float() * 100.0f / 255.0f;
+    power = parser.value_float() * 100.0f / 1000.0f;
 
   // If no power given treat as non-inline
   if (laser->IsOnline() && !isnan(power))

@@ -1678,10 +1678,17 @@ uint32_t Stepper::stepper_block_phase_isr() {
         #endif // LIN_ADVANCE
 
         // Update laser - Accelerating
+        #ifdef ENABLE_LASER_TRAP
         if (laser_trap.enabled) {
           laser_trap.cur_power = (current_block->laser.power * acc_step_rate) / current_block->nominal_rate;
           laser->TurnOn_ISR(laser_trap.cur_power);
         }
+        #else
+        if (laser_trap.enabled) {
+          laser_trap.cur_power = current_block->laser.power;
+          laser->TurnOn_ISR(laser_trap.cur_power);
+        }
+        #endif
       }
       // Are we in Deceleration phase ?
       else if (step_events_completed > decelerate_after) {
@@ -1732,10 +1739,17 @@ uint32_t Stepper::stepper_block_phase_isr() {
         #endif // LIN_ADVANCE
 
         // Update laser - Decelerating
+        #ifdef ENABLE_LASER_TRAP
         if (laser_trap.enabled) {
           laser_trap.cur_power = (current_block->laser.power * step_rate) / current_block->nominal_rate;
           laser->TurnOn_ISR(laser_trap.cur_power);
         }
+        #else
+        if (laser_trap.enabled) {
+          laser_trap.cur_power = current_block->laser.power;
+          laser->TurnOn_ISR(laser_trap.cur_power);
+        }
+        #endif
       }
       // We must be in cruise phase otherwise
       else {
@@ -1952,7 +1966,11 @@ uint32_t Stepper::stepper_block_phase_isr() {
 
       // Set up inline laser power
       laser_trap.enabled = current_block->laser.status.isEnabled;
+      #ifdef ENABLE_LASER_TRAP
       laser_trap.cur_power = current_block->laser.power_entry; // RESET STATE
+      #else
+      laser_trap.cur_power = current_block->laser.power;
+      #endif
       laser_trap.cruise_set = false;
       if (laser_trap.enabled)
         laser->TurnOn_ISR(laser_trap.cur_power);
@@ -2144,8 +2162,12 @@ void Stepper::StepperBind8PinPort(uint8_t axis, uint8_t port) {
   }
 
   if ((axis == E_AXIS && port != PORT_8PIN_1) &&
-       (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER || ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_10W ||
-       ModuleBase::toolhead() == MODULE_TOOLHEAD_CNC)) {
+       (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER ||
+        ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_10W ||
+        ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_20W ||
+        ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_40W ||
+        ModuleBase::toolhead() == MODULE_TOOLHEAD_CNC)
+  ) {
       LOG_E("Failed: CNC and Laser E axis must be bind at 1 port\n");
     return;
   }

@@ -254,6 +254,8 @@ millis_t max_inactive_time, // = 0
   float l_home_offset[XN] = L_HOME_OFFSET_DEFAULT;
   float l_home_offset_3dp2e[XN] = L_HOME_OFFSET_3DP2E_DEFAULT;
   float l_home_offset_laser[XN] = L_HOME_OFFSET_LASER_DEFAULT;
+  float l_home_offset_20W_laser[XN] = L_HOME_OFFSET_20W_LASER_DEFAULT;
+  float l_home_offset_40W_laser[XN] = L_HOME_OFFSET_40W_LASER_DEFAULT;
 
   float print_min_planner_speed = MINIMUM_PRINT_PLANNER_SPEED;
   float laser_min_planner_speed = MINIMUM_LASER_PLANNER_SPEED;

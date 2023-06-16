@@ -25,7 +25,7 @@
 #include "../module/toolhead_laser.h"
 
 /*
-* M2020 : 10w laser control
+* M2020 : 10w 20w 40w laser control
  *   S[bool]   0 show security status , 1 get security status from module
  *   L[bool]   set auto focus light, 0-OFF 1-ON
  *   Y[uint32] set online sync Id
@@ -34,7 +34,7 @@
 **/
 
 void GcodeSuite::M2002() {
-  if (ModuleBase::toolhead() != MODULE_TOOLHEAD_LASER_10W) {
+  if (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER) {
     return;
   }
   const bool seen_s = parser.seen('S');

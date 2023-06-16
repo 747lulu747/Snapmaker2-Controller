@@ -1076,6 +1076,8 @@ extern uint8_t E_ENABLE_ON;
 #define L_HOME_OFFSET_DEFAULT {-19, -4, 0, 0}
 #define L_HOME_OFFSET_3DP2E_DEFAULT {-32, -23, 0, 0}
 #define L_HOME_OFFSET_LASER_DEFAULT {-19, -10, 0, 0}  // to fit camera capture
+#define L_HOME_OFFSET_20W_LASER_DEFAULT {-19, -10, 0, 0}  // to fit camera capture
+#define L_HOME_OFFSET_40W_LASER_DEFAULT {-19, -10, 0, 0}  // to fit camera capture
 #endif //DISABLE(SW_MACHINE_SIZE)
 
 // The size of the print bed
@@ -2202,3 +2204,4 @@ extern uint8_t E_ENABLE_ON;
 
 
 // #define DEBUG_ISR_LATENCY
+// #define ENABLE_LASER_TRAP

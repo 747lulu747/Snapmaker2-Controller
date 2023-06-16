@@ -159,7 +159,11 @@ ErrCode SystemService::PreProcessStop() {
 
   print_job_timer.stop();
 
-  if ((ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER) || (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_10W)) {
+  if (  (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER) ||
+        (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_10W) ||
+        (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_20W) ||
+        (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_40W)
+  ) {
     laser->TurnOff();
     is_waiting_gcode = false;
     is_laser_on = false;
@@ -367,6 +371,8 @@ ErrCode SystemService::ResumeTrigger(TriggerSource source) {
   case MODULE_TOOLHEAD_CNC:
   case MODULE_TOOLHEAD_LASER:
   case MODULE_TOOLHEAD_LASER_10W:
+  case MODULE_TOOLHEAD_LASER_20W:
+  case MODULE_TOOLHEAD_LASER_40W:
     if (enclosure.DoorOpened()) {
       LOG_E("Door is opened!\n");
       fault_flag_ |= FAULT_FLAG_DOOR_OPENED;
@@ -402,6 +408,8 @@ ErrCode SystemService::ResumeProcess() {
 
   case MODULE_TOOLHEAD_LASER:
   case MODULE_TOOLHEAD_LASER_10W:
+  case MODULE_TOOLHEAD_LASER_20w:
+  case MODULE_TOOLHEAD_LASER_40W:
     resume_laser();
     break;
 
@@ -468,13 +476,19 @@ ErrCode SystemService::ResumeOver() {
   case MODULE_TOOLHEAD_CNC:
   case MODULE_TOOLHEAD_LASER:
   case MODULE_TOOLHEAD_LASER_10W:
+  case MODULE_TOOLHEAD_LASER_20W:
+  case MODULE_TOOLHEAD_LASER_40W:
     if (enclosure.DoorOpened()) {
       LOG_E("Door is opened, please close the door!\n");
       PauseTrigger(TRIGGER_SOURCE_DOOR_OPEN);
       return E_DOOR_OPENED;
     }
 
-    if ((MODULE_TOOLHEAD_LASER == ModuleBase::toolhead()) || (MODULE_TOOLHEAD_LASER_10W == ModuleBase::toolhead())) {
+    if (  (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER) ||
+          (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_10W) ||
+          (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_20W) ||
+          (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_40W)
+    ) {
       if (pl_recovery.cur_data_.laser_pwm > 0)
         laser->TurnOn();
     }
@@ -629,6 +643,8 @@ ErrCode SystemService::StartWork(TriggerSource s) {
 
   case MODULE_TOOLHEAD_LASER:
   case MODULE_TOOLHEAD_LASER_10W:
+  case MODULE_TOOLHEAD_LASER_20W:
+  case MODULE_TOOLHEAD_LASER_40W:
     is_laser_on = false;
     is_waiting_gcode = false;
   case MODULE_TOOLHEAD_CNC:
@@ -1782,7 +1798,10 @@ ErrCode SystemService::SendException(uint32_t fault) {
 }
 
 ErrCode SystemService::SendSecurityStatus () {
-  if (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_10W) {
+  if (  (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_10W) ||
+        (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_20W) ||
+        (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_40W)
+  ) {
     laser->SendSecurityStatus();
   }
 
@@ -2109,7 +2128,11 @@ ErrCode SystemService::ChangeRuntimeEnv(SSTP_Event_t &event) {
 
   case RENV_TYPE_LASER_POWER:
     LOG_I("new laser power: %.2f\n", param);
-    if ((MODULE_TOOLHEAD_LASER != ModuleBase::toolhead()) && (MODULE_TOOLHEAD_LASER_10W != ModuleBase::toolhead())) {
+    if (  (ModuleBase::toolhead() != MODULE_TOOLHEAD_LASER) &&
+          (ModuleBase::toolhead() != MODULE_TOOLHEAD_LASER_10W) &&
+          (ModuleBase::toolhead() != MODULE_TOOLHEAD_LASER_20W) &&
+          (ModuleBase::toolhead() != MODULE_TOOLHEAD_LASER_40W)
+    ) {
       ret = E_INVALID_STATE;
       break;
     }
@@ -2351,7 +2374,11 @@ ErrCode SystemService::CallbackPreQS(QuickStopSource source) {
     // reset the status of filament monitor
     runout.reset();
     // make sure laser is off
-    if ((ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER) || (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_10W)) {
+    if (  (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER) ||
+          (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_10W) ||
+          (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_20W) ||
+          (ModuleBase::toolhead() == MODULE_TOOLHEAD_LASER_40W)
+    ) {
       laser->TurnOff();
     }
     break;

@@ -181,6 +181,12 @@ enum ModuleFunctionID {
   MODULE_FUNC_PROXIMITY_SWITCH_POWER_CTRL       ,  // 59
   MODULE_FUNC_SET_CROSSLIGHT                    ,  // 60
   MODULE_FUNC_GET_CROSSLIGHT_STATE              ,  // 61
+  MODULE_FUNC_SET_FIRE_SENSOR_SENSITIVITY       ,  // 62
+  MODULE_FUNC_GET_FIRE_SENSOR_SENSITIVITY       ,  // 63
+  MODULE_FUNC_SET_FIRE_SENSOR_REPORT_TIME       ,  // 64
+  MODULE_FUNC_REPORT_FIRE_SENSOR_RAWDATA        ,  // 65
+  MODULE_FUNC_SET_CROSSLIGHT_OFFSET             ,  // 66
+  MODULE_FUNC_GET_CROSSLIGHT_OFFSET             ,  // 67
 
   MODULE_FUNC_MAX
 };
@@ -259,6 +265,12 @@ const uint8_t module_prio_table[][2] = {
   {/* MODULE_FUNC_PROXIMITY_SWITCH_POWER_CTRL       */  MODULE_FUNC_PRIORITY_MEDIUM, 1},
   {/* MODULE_FUNC_SET_CROSSLIGHT                    */  MODULE_FUNC_PRIORITY_LOW, 1},
   {/* MODULE_FUNC_GET_CROSSLIGHT_STATE              */  MODULE_FUNC_PRIORITY_LOW, 1},
+  {/* MODULE_FUNC_SET_FIRE_SENSOR_SENSITIVITY       */  MODULE_FUNC_PRIORITY_MEDIUM, 1},
+  {/* MODULE_FUNC_GET_FIRE_SENSOR_SENSITIVITY       */  MODULE_FUNC_PRIORITY_MEDIUM, 1},
+  {/* MODULE_FUNC_SET_FIRE_SENSOR_REPORT_TIME       */  MODULE_FUNC_PRIORITY_LOW, 1},
+  {/* MODULE_FUNC_REPORT_FIRE_SENSOR_RAWDATA        */  MODULE_FUNC_PRIORITY_LOW, 1},
+  {/* MODULE_FUNC_SET_CROSSLIGHT_OFFSET             */  MODULE_FUNC_PRIORITY_MEDIUM, 1},
+  {/* MODULE_FUNC_GET_CROSSLIGHT_OFFSET             */  MODULE_FUNC_PRIORITY_MEDIUM, 1},
 };
 
 
@@ -330,27 +342,20 @@ class ModuleBase {
 
     static ErrCode Upgrade(MAC_t &mac, uint32_t fw_addr, uint32_t length);
     static ErrCode InitModule8p(MAC_t &mac, int dir_pin, uint8_t index);
-
     static ModuleToolHeadType toolhead() { return toolhead_; }
-
     static bool lock_marlin_uart() { return lock_marlin_uart_; };
     static LockMarlinUartSource lock_marlin_source() { return lock_marlin_source_; };
     static void LockMarlinUart(LockMarlinUartSource source=LOCK_SOURCE_NONE);
     static void UnlockMarlinUart();
     static void ReportMarlinUart();
     static void StaticProcess();
-
     static ErrCode SetMAC(SSTP_Event_t &event);
     static ErrCode GetMAC(SSTP_Event_t &event);
-
     virtual ErrCode Init(MAC_t &mac, uint8_t mac_index) { return E_SUCCESS; }
     virtual ErrCode PostInit() { return E_SUCCESS; }  // Called after all modules are initialized
     virtual void Process() { return; }
-
     virtual bool IsOnline(uint8_t sub_index = 0) { return false; }
-
     virtual uint32_t mac(uint8_t sub_index = 0) { return MODULE_MAC_ID_INVALID; }
-
     uint16_t device_id() { return device_id_; }
 
   protected:
@@ -358,7 +363,6 @@ class ModuleBase {
 
   protected:
     uint16_t device_id_;
-
     static bool lock_marlin_uart_;
     static LockMarlinUartSource lock_marlin_source_;
     static uint16_t timer_in_static_process_;
