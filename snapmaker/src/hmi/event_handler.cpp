@@ -761,12 +761,12 @@ static ErrCode GetCrossLight(SSTP_Event_t &event) {
   return laser->GetCrossLight(event);
 }
 
-static ErrCode SetFireDetectSensitivity(SSTP_Event_t &event) {
-  return laser->SetFireDetectSensitivity(event);
+static ErrCode SetFireSensorSensitivity(SSTP_Event_t &event) {
+  return laser->SetFireSensorSensitivity(event);
 }
 
-static ErrCode GetFireDetectSensitivity(SSTP_Event_t &event) {
-  return laser->GetFireDetectSensitivity(event);
+static ErrCode GetFireSensorSensitivity(SSTP_Event_t &event) {
+  return laser->GetFireSensorSensitivity(event);
 }
 
 EventCallback_t settings_event_cb[SETTINGS_OPC_MAX] = {
@@ -812,8 +812,8 @@ EventCallback_t settings_event_cb[SETTINGS_OPC_MAX] = {
 
   /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    SetCrossLight},
   /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    GetCrossLight},
-  /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    SetFireDetectSensitivity},
-  /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    GetFireDetectSensitivity},
+  /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    SetFireSensorSensitivity},
+  /* [SETTINGS_OPC_GET_ACTIVE_EXTRUDER]    =  */{EVENT_ATTR_DEFAULT,    GetFireSensorSensitivity},
 };
 
 

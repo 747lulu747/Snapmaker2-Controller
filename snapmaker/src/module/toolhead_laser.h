@@ -31,6 +31,7 @@
 #define TOOLHEAD_LASER_POWER_SAFE_LIMIT   (0.5)
 #define TOOLHEAD_LASER_POWER_NORMAL_LIMIT (100)
 #define TOOLHEAD_LASER_CAMERA_FOCUS_MAX   (65000)  // mm*1000
+#define INVALID_OFFSET                    (-10000)
 
 enum ToolheadLaserFanState {
   TOOLHEAD_LASER_FAN_STATE_OPEN,
@@ -114,7 +115,8 @@ class ToolHeadLaser: public ModuleBase {
       laser_pwm_pin_checked_ = false;
       pwm_pin_pullup_state_ = 0xff;
       pwm_pin_pulldown_state_ = 0xff;
-      fire_detect_sensitivity_ = 0;
+      fire_sensor_sensitivity_ = 0;
+      crosslight_offset_x = crosslight_offset_y = INVALID_OFFSET;
     }
 
     ErrCode Init(MAC_t &mac, uint8_t mac_index);
@@ -123,13 +125,10 @@ class ToolHeadLaser: public ModuleBase {
     void TurnOn();
     void PwmCtrlDirectly(uint8_t duty);
     void TurnOff();
-
     void SetFanPower(uint8_t power);  // power 0 - 100
-
     void SetPower(float power);       // change power_val_ and power_pwm_ but not change actual output
     void SetOutput(float power);      // change power_val_, power_pwm_ and actual output
     void SetPowerLimit(float limit);  // change power_val_, power_pwm_ and power_limit_, may change actual output if current output is beyond limit
-
     void TryCloseFan();
     bool IsOnline(uint8_t sub_index = 0) { return mac_index_ != MODULE_MAC_INDEX_INVALID; }
 
@@ -138,13 +137,11 @@ class ToolHeadLaser: public ModuleBase {
     ErrCode SetFocus(SSTP_Event_t &event);
     ErrCode DoManualFocusing(SSTP_Event_t &event);
     ErrCode DoAutoFocusing(SSTP_Event_t &event);
-
     ErrCode SetCameraBtName(SSTP_Event_t &event);
     ErrCode GetCameraBtName(SSTP_Event_t &event);
     ErrCode GetCameraBtMAC(SSTP_Event_t &event);
     ErrCode ReadBluetoothVer();
     void SetCameraLight(uint8_t state);
-
     ErrCode GetSecurityStatus(SSTP_Event_t &event);
     ErrCode SendSecurityStatus();
     ErrCode SendPauseStatus();
@@ -156,22 +153,23 @@ class ToolHeadLaser: public ModuleBase {
     ErrCode LaserGetHWVersion();
     ErrCode SetCrossLight(SSTP_Event_t &event);
     ErrCode GetCrossLight(SSTP_Event_t &event);
-    ErrCode SetFireDetectSensitivity(SSTP_Event_t &event);
-    ErrCode GetFireDetectSensitivity(SSTP_Event_t &event);
+    ErrCode SetFireSensorSensitivity(SSTP_Event_t &event);
+    ErrCode GetFireSensorSensitivity(SSTP_Event_t &event);
+    ErrCode SetFireSensorReportTime(SSTP_Event_t &event);
+    ErrCode SetCrosslightOffset(SSTP_Event_t &event);
+    ErrCode GetCrosslightOffset(SSTP_Event_t &event);
+
     void TellSecurityStatus();
     uint8_t LaserGetPwmPinState();
     void LaserConfirmPinState();
     void Process();
 
     uint32_t mac(uint8_t sub_index = 0) { return canhost.mac(mac_index_); }
-
     float power() { return power_val_; }
-
     uint16_t power_pwm() { return power_pwm_; };
     void power_pwm(uint16_t pwm) { power_pwm_ = pwm; }
     uint16_t tim_pwm();
     void tim_pwm(uint16_t pwm);
-
     uint16_t focus() { return focus_; }
     void focus(uint16_t focus) {
       if(focus > TOOLHEAD_LASER_CAMERA_FOCUS_MAX)
@@ -179,7 +177,6 @@ class ToolHeadLaser: public ModuleBase {
       else
         focus_ = focus / 1000;
     }
-
     ToolHeadLaserState state() { return state_; }
 
   private:
@@ -218,8 +215,9 @@ class ToolHeadLaser: public ModuleBase {
     int8_t imu_temperature_;
     bool need_to_turnoff_laser_;
     bool need_to_tell_hmi_;
-    uint8_t fire_detect_sensitivity_;
-    uint8_t fire_detect_value_;
+    uint8_t fire_sensor_sensitivity_;
+    uint16_t fire_sensor_rawdata_;
+    float crosslight_offset_x, crosslight_offset_y;
     LASER_STATUS laser_status_;
 
   // Laser Inline Power functions

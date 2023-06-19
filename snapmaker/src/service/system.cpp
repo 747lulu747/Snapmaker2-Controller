@@ -408,7 +408,7 @@ ErrCode SystemService::ResumeProcess() {
 
   case MODULE_TOOLHEAD_LASER:
   case MODULE_TOOLHEAD_LASER_10W:
-  case MODULE_TOOLHEAD_LASER_20w:
+  case MODULE_TOOLHEAD_LASER_20W:
   case MODULE_TOOLHEAD_LASER_40W:
     resume_laser();
     break;

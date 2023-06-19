@@ -115,7 +115,7 @@ static void CallbackAckReportSecurity(CanStdDataFrame_t &cmd) {
   laser->roll_ = (cmd.data[3] << 8) | cmd.data[4];
   laser->laser_temperature_ = cmd.data[5];
   laser->imu_temperature_ = (int8_t)cmd.data[6];
-  laser->fire_detect_value_ = (int8_t)cmd.data[7];
+  laser->fire_sensor_rawdata_ = (int8_t)cmd.data[7];
 
   laser->need_to_tell_hmi_ = true;
   if (laser->security_status_ != 0) {
@@ -831,7 +831,6 @@ ErrCode ToolHeadLaser::SetAutoFocusLight(SSTP_Event_t &event) {
     return hmi.Send(event);
   }
 
-
   switch (event.data[0]) {
   case 0:
     can_buffer[0] = 0;
@@ -849,7 +848,6 @@ ErrCode ToolHeadLaser::SetAutoFocusLight(SSTP_Event_t &event) {
   cmd.data      = can_buffer;
   cmd.length    = 1;
 
-
   uint8_t buff[1];
   if (canhost.SendStdCmdSync(cmd, 2000) == E_SUCCESS) {
     buff[0] = 0;
@@ -860,13 +858,11 @@ ErrCode ToolHeadLaser::SetAutoFocusLight(SSTP_Event_t &event) {
   SSTP_Event_t event_hmi = {EID_SETTING_ACK, SETTINGS_OPC_SET_AUTOFOCUS_LIGHT};
   event_hmi.length = 1;
   event_hmi.data = buff;
-
   return hmi.Send(event_hmi);
 }
 
 ErrCode ToolHeadLaser::GetSecurityStatus(SSTP_Event_t &event) {
   CanStdFuncCmd_t cmd;
-
   cmd.id        = MODULE_FUNC_REPORT_SECURITY_STATUS;
   cmd.data      = NULL;
   cmd.length    = 0;
@@ -883,7 +879,7 @@ ErrCode ToolHeadLaser::SendSecurityStatus() {
   buff[3] = laser->roll_ & 0xff;
   buff[4] = laser->pitch_ >> 8;
   buff[5] = laser->pitch_ & 0xff;
-  buff[6] = laser->fire_detect_value_ & 0xff;
+  buff[6] = laser->fire_sensor_rawdata_ & 0xff;
 
   event.length = 6;
   event.data = buff;
@@ -1056,23 +1052,49 @@ ErrCode ToolHeadLaser::GetCrossLight(SSTP_Event_t &event) {
   return E_SUCCESS;
 }
 
-ErrCode ToolHeadLaser::SetFireDetectSensitivity(SSTP_Event_t &event) {
+ErrCode ToolHeadLaser::SetFireSensorSensitivity(SSTP_Event_t &event) {
+  CanStdFuncCmd_t cmd;
+  uint8_t can_buffer[1];
+
+  can_buffer[0] = event.data[0];
+  cmd.id        = MODULE_FUNC_SET_FIRE_SENSOR_SENSITIVITY;
+  cmd.data      = can_buffer;
+  cmd.length    = 1;
+
   uint8_t buff[1];
-  buff[0] = 0;
-  SSTP_Event_t event_hmi = {EID_SETTING_ACK, SETTINGS_OPC_SET_FIRE_DETECT_SENSITIVITY};
+  if (canhost.SendStdCmdSync(cmd, 2000) == E_SUCCESS) {
+    buff[0] = 0;
+  } else {
+    buff[0] = 1;
+  }
+
+  SSTP_Event_t event_hmi = {EID_SETTING_ACK, SETTINGS_OPC_SET_FIRE_SENSOR_SENSITIVITY};
   event_hmi.length = 1;
   event_hmi.data = buff;
   return hmi.Send(event_hmi);
 }
 
-ErrCode ToolHeadLaser::GetFireDetectSensitivity(SSTP_Event_t &event) {
-  uint8_t buff[1];
-  SSTP_Event_t event_tmp = {EID_SETTING_ACK, SETTINGS_OPC_GET_FIRE_DETECT_SENSITIVITY};
-  buff[0] = fire_detect_sensitivity_;
+ErrCode ToolHeadLaser::GetFireSensorSensitivity(SSTP_Event_t &event) {
+  CanStdFuncCmd_t cmd;
+  uint8_t buff[2] = {0};
+
+  cmd.id        = MODULE_FUNC_GET_FIRE_SENSOR_SENSITIVITY;
+  cmd.data      = buff;
+  cmd.length    = 1;
+
+  ErrCode ret;
+  ret = canhost.SendStdCmdSync(cmd, 2000);
+  if (E_SUCCESS == ret) {
+    buff[0] = 0;
+  } else {
+    buff[0] = 1;
+  }
+
+  SSTP_Event_t event_tmp = {EID_SETTING_ACK, SETTINGS_OPC_GET_FIRE_SENSOR_SENSITIVITY};
+  buff[1] = cmd.data[0];
   event_tmp.length = 1;
   event_tmp.data = buff;
-  hmi.Send(event_tmp);
-  return E_SUCCESS;
+  return hmi.Send(event_tmp);
 }
 
 void ToolHeadLaser::TellSecurityStatus() {
@@ -1080,6 +1102,82 @@ void ToolHeadLaser::TellSecurityStatus() {
   SERIAL_ECHO("Laser 10w security state: 0x");
   SERIAL_PRINTLN(laser->security_status_, HEX);
   SERIAL_ECHOLNPAIR("Laser 10w temp: ", laser->laser_temperature_, ", imu temp: ", laser->imu_temperature_, ", roll: ", laser->roll_, ", pitch: ", laser->pitch_, ", pwm_pin_pulldown_state_: ", laser->pwm_pin_pulldown_state_, ", pwm_pin_pullup_state_: ", laser->pwm_pin_pullup_state_);
+}
+
+ErrCode ToolHeadLaser::SetFireSensorReportTime(SSTP_Event_t &event) {
+  CanStdFuncCmd_t cmd;
+  uint8_t can_buffer[2];
+
+  can_buffer[0] = event.data[0];
+  can_buffer[1] = event.data[1];
+  cmd.id        = MODULE_FUNC_SET_FIRE_SENSOR_REPORT_TIME;
+  cmd.data      = can_buffer;
+  cmd.length    = 2;
+
+  uint8_t buff[1];
+  if (canhost.SendStdCmdSync(cmd, 2000) == E_SUCCESS) {
+    buff[0] = 0;
+  } else {
+    buff[0] = 1;
+  }
+
+  SSTP_Event_t event_hmi = {EID_SETTING_ACK, SETTINGS_OPC_SET_FIRE_SENSOR_REPORT_TIME};
+  event_hmi.length = 1;
+  event_hmi.data = buff;
+
+  return hmi.Send(event_hmi);
+}
+
+ErrCode ToolHeadLaser::SetCrosslightOffset(SSTP_Event_t &event) {
+  CanStdFuncCmd_t cmd;
+  uint8_t can_buffer[8];
+
+  float *fx = (float *)(&can_buffer[0]), *fy = (float *)(&can_buffer[4]);
+  int32_t x = *(int32_t *)(&event.data[0]), y = *(int32_t *)(&event.data[4]);
+  *fx = (float)x / 1000, *fy = (float)y / 1000;
+  cmd.id        = MODULE_FUNC_SET_CROSSLIGHT_OFFSET;
+  cmd.data      = can_buffer;
+  cmd.length    = 8;
+
+  uint8_t buff[1];
+  if (canhost.SendStdCmdSync(cmd, 2000) == E_SUCCESS) {
+    buff[0] = 0;
+  } else {
+    buff[0] = 1;
+  }
+
+  SSTP_Event_t event_hmi = {EID_SETTING_ACK, SETTINGS_OPC_SET_CROSSLIGHT_OFFSET};
+  event_hmi.length = 1;
+  event_hmi.data = buff;
+
+  return hmi.Send(event_hmi);
+}
+
+ErrCode ToolHeadLaser::GetCrosslightOffset(SSTP_Event_t &event) {
+  CanStdFuncCmd_t cmd;
+  uint8_t buff[9] = {0};
+
+  cmd.id        = MODULE_FUNC_GET_CROSSLIGHT_OFFSET;
+  cmd.data      = buff;
+  cmd.length    = 1;
+
+  ErrCode ret;
+  ret = canhost.SendStdCmdSync(cmd, 2000);
+  if (ret != E_SUCCESS) {
+    buff[0] = E_FAIL;
+    event_tmp.length = 1;
+    event_tmp.data = buff;
+    return hmi.Send(event);
+  }
+
+  SSTP_Event_t event_tmp = {EID_SETTING_ACK, SETTINGS_OPC_GET_CROSSLIGHT_OFFSET};
+  float *fx = (float *)(&buff[0]), *fy = (float *)(&buff[4]);
+  buff[0] = E_SUCCESS;
+  int32_t *x = (int32_t *)&buff[1], *y = (int32_t *)&buff[1+4];
+  *x = fx * 1000, *y = fy * 1000;
+  event_tmp.length = 9;
+  event_tmp.data = buff;
+  return hmi.Send(event_tmp);
 }
 
 uint8_t ToolHeadLaser::LaserGetPwmPinState() {

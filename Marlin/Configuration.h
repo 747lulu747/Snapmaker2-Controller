@@ -1064,6 +1064,8 @@ extern uint8_t E_ENABLE_ON;
   extern float m_home_offset_3dp2e[XN];
   extern float l_home_offset_3dp2e[XN];
   extern float l_home_offset_laser[XN];
+  extern float l_home_offset_20W_laser[XN];
+  extern float l_home_offset_40W_laser[XN];
 
   extern float print_min_planner_speed;
   extern float laser_min_planner_speed;
