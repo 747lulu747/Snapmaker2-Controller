@@ -1361,6 +1361,10 @@ HAL_STEP_TIMER_ISR() {
 
 
 void Stepper::ts_isr() {
+  static bool last_got_step = false;
+  uint16_t entry_tick;
+  uint32_t max_try;
+
 __start:
   #ifdef SHAPER_LOG_ENABLE
   HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(HAL_TIMER_TYPE_MAX));
@@ -1372,8 +1376,6 @@ __start:
   #ifdef DEBUG_IO
   WRITE(DEBUG_IO, 1);
   #endif
-
-  static bool last_got_step = false;
 
   // Program timer compare for the maximum period, so it does NOT
   // flag an interrupt while this ISR is running - So changes from small
@@ -1431,6 +1433,7 @@ __start:
   }
 
   int fall_edge_axis = -1;
+  entry_tick = HAL_timer_get_count(STEP_TIMER_NUM);
   if (sif_valid) {
     if (step_time_dir.out_step) {
       fall_edge_axis = step_time_dir.axis;
@@ -1483,6 +1486,7 @@ __start:
         else {
           sif_valid = false;
           // wait for some milliseconds
+          // TODO: here may cause lose step
           wait_sif_countdown = 0;
         }
       }
@@ -1491,7 +1495,6 @@ __start:
 
   if (sif_valid) {
     last_got_step = true;
-
     struct StepFlagData flag_data;
     if ((step_time_dir.sync || step_time_dir.update_file_pos || step_time_dir.chg_extruder) && steps_flag.popQueue(&flag_data)) {
       // update file pos
@@ -1522,6 +1525,26 @@ __start:
       }
       if (current_direction_bits != last_direction_bits) {
         last_direction_bits = current_direction_bits;
+        if (-1 != fall_edge_axis) {
+          max_try = 100;
+          while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
+          if (X_AXIS == fall_edge_axis) {
+            PULSE_STOP(X);
+          }
+          else if(Y_AXIS == fall_edge_axis) {
+            PULSE_STOP(Y);
+          }
+          else if(Z_AXIS == fall_edge_axis) {
+            PULSE_STOP(Z);
+          }
+          else if(E_AXIS == fall_edge_axis) {
+            PULSE_STOP(E);
+          }
+          else if(B_AXIS == fall_edge_axis) {
+            PULSE_STOP(B);
+          }
+          fall_edge_axis = -1;
+        }
         set_directions();
       }
     }
@@ -1533,38 +1556,48 @@ __start:
     uint16_t cur_tick = HAL_timer_get_count(STEP_TIMER_NUM);
     if (step_time_dir.itv > (cur_tick + 4 * STEPPER_TIMER_TICKS_PER_US)) {
       HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv));
-      if (X_AXIS == fall_edge_axis) {
-        PULSE_STOP(X);
-      }
-      else if(Y_AXIS == fall_edge_axis) {
-        PULSE_STOP(Y);
-      }
-      else if(Z_AXIS == fall_edge_axis) {
-        PULSE_STOP(Z);
-      }
-      else if(E_AXIS == fall_edge_axis) {
-        PULSE_STOP(E);
-      }
-      else if(B_AXIS == fall_edge_axis) {
-        PULSE_STOP(B);
+      if (-1 != fall_edge_axis) {
+        max_try = 100;
+        while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
+        if (X_AXIS == fall_edge_axis) {
+          PULSE_STOP(X);
+        }
+        else if(Y_AXIS == fall_edge_axis) {
+          PULSE_STOP(Y);
+        }
+        else if(Z_AXIS == fall_edge_axis) {
+          PULSE_STOP(Z);
+        }
+        else if(E_AXIS == fall_edge_axis) {
+          PULSE_STOP(E);
+        }
+        else if(B_AXIS == fall_edge_axis) {
+          PULSE_STOP(B);
+        }
+        fall_edge_axis = -1;
       }
     }
     else {
       // TODO: shoule clear the step timer??
-      if (X_AXIS == fall_edge_axis) {
-        PULSE_STOP(X);
-      }
-      else if(Y_AXIS == fall_edge_axis) {
-        PULSE_STOP(Y);
-      }
-      else if(Z_AXIS == fall_edge_axis) {
-        PULSE_STOP(Z);
-      }
-      else if(E_AXIS == fall_edge_axis) {
-        PULSE_STOP(E);
-      }
-      else if(B_AXIS == fall_edge_axis) {
-        PULSE_STOP(B);
+      if (-1 != fall_edge_axis) {
+        max_try = 100;
+        while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
+        if (X_AXIS == fall_edge_axis) {
+          PULSE_STOP(X);
+        }
+        else if(Y_AXIS == fall_edge_axis) {
+          PULSE_STOP(Y);
+        }
+        else if(Z_AXIS == fall_edge_axis) {
+          PULSE_STOP(Z);
+        }
+        else if(E_AXIS == fall_edge_axis) {
+          PULSE_STOP(E);
+        }
+        else if(B_AXIS == fall_edge_axis) {
+          PULSE_STOP(B);
+        }
+        fall_edge_axis = -1;
       }
       timer_set_count(STEP_TIMER_DEV, hal_timer_t(0));
       goto __start;
@@ -1596,20 +1629,25 @@ __start:
       axis_mng.motion_info_rb.push(mi);
     }
 
-    if (X_AXIS == fall_edge_axis) {
-      PULSE_STOP(X);
-    }
-    else if(Y_AXIS == fall_edge_axis) {
-      PULSE_STOP(Y);
-    }
-    else if(Z_AXIS == fall_edge_axis) {
-      PULSE_STOP(Z);
-    }
-    else if(E_AXIS == fall_edge_axis) {
-      PULSE_STOP(E);
-    }
-    else if(B_AXIS == fall_edge_axis) {
-      PULSE_STOP(B);
+    if (-1 != fall_edge_axis) {
+      max_try = 100;
+      while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
+      if (X_AXIS == fall_edge_axis) {
+        PULSE_STOP(X);
+      }
+      else if(Y_AXIS == fall_edge_axis) {
+        PULSE_STOP(Y);
+      }
+      else if(Z_AXIS == fall_edge_axis) {
+        PULSE_STOP(Z);
+      }
+      else if(E_AXIS == fall_edge_axis) {
+        PULSE_STOP(E);
+      }
+      else if(B_AXIS == fall_edge_axis) {
+        PULSE_STOP(B);
+      }
+      fall_edge_axis = -1;
     }
 
     // #ifdef DEBUG_IO
