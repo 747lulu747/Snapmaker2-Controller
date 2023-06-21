@@ -1163,18 +1163,18 @@ ErrCode ToolHeadLaser::GetCrosslightOffset(SSTP_Event_t &event) {
 
   ErrCode ret;
   ret = canhost.SendStdCmdSync(cmd, 2000);
+  SSTP_Event_t event_tmp = {EID_SETTING_ACK, SETTINGS_OPC_GET_CROSSLIGHT_OFFSET};
   if (ret != E_SUCCESS) {
-    buff[0] = E_FAIL;
+    buff[0] = E_FAILURE;
     event_tmp.length = 1;
     event_tmp.data = buff;
-    return hmi.Send(event);
+    return hmi.Send(event_tmp);
   }
 
-  SSTP_Event_t event_tmp = {EID_SETTING_ACK, SETTINGS_OPC_GET_CROSSLIGHT_OFFSET};
-  float *fx = (float *)(&buff[0]), *fy = (float *)(&buff[4]);
+  float fx = *(float *)(&buff[0]), fy = *(float *)(&buff[4]);
   buff[0] = E_SUCCESS;
   int32_t *x = (int32_t *)&buff[1], *y = (int32_t *)&buff[1+4];
-  *x = fx * 1000, *y = fy * 1000;
+  *x = (int32_t)(fx * 1000), *y = (int32_t)(fy * 1000);
   event_tmp.length = 9;
   event_tmp.data = buff;
   return hmi.Send(event_tmp);
