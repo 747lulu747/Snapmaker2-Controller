@@ -169,6 +169,11 @@ ErrCode SystemService::PreProcessStop() {
     is_laser_on = false;
   }
   gocde_pack_start_line(0);
+
+  // always reset the laser crosslight offset
+  laser_crosslight_offset[X_AXIS] = 0.0;
+  laser_crosslight_offset[Y_AXIS] = 0.0;
+
   return E_SUCCESS;
 }
 
@@ -315,7 +320,18 @@ void inline SystemService::resume_cnc(void) {
 }
 
 void inline SystemService::resume_laser(void) {
-
+  if (MODULE_TOOLHEAD_LASER_20W == ModuleBase::toolhead() || MODULE_TOOLHEAD_LASER_40W == ModuleBase::toolhead()) {
+    laser->SetCrossLightCAN(false);
+    float ox, oy;
+    if (E_SUCCESS == laser->GetCrossLightOffsetCAN(ox, oy)) {
+      LOG_I("Set laser crosslight offset: %f, %f\n", ox, oy);
+      laser_crosslight_offset[X_AXIS] = ox;
+      laser_crosslight_offset[Y_AXIS] = oy;
+    }
+    else {
+      LOG_I("Can not move to crosslight center, may been this laser have no crosslight or crosslight center is invalid!\n");
+    }
+  }
 }
 
 /**
@@ -647,6 +663,19 @@ ErrCode SystemService::StartWork(TriggerSource s) {
   case MODULE_TOOLHEAD_LASER_40W:
     is_laser_on = false;
     is_waiting_gcode = false;
+    if (MODULE_TOOLHEAD_LASER_20W == ModuleBase::toolhead() || MODULE_TOOLHEAD_LASER_40W == ModuleBase::toolhead()) {
+      laser->SetCrossLightCAN(false);
+      float ox, oy;
+      if (E_SUCCESS == laser->GetCrossLightOffsetCAN(ox, oy)) {
+        LOG_I("Set laser crosslight offset: %f, %f\n", ox, oy);
+        laser_crosslight_offset[X_AXIS] = ox;
+        laser_crosslight_offset[Y_AXIS] = oy;
+      }
+      else {
+        LOG_I("Can not move to crosslight center, may been this laser have no crosslight or crosslight center is invalid!\n");
+      }
+    }
+
   case MODULE_TOOLHEAD_CNC:
     if (enclosure.DoorOpened()) {
       fault_flag_ |= FAULT_FLAG_DOOR_OPENED;
@@ -1733,7 +1762,10 @@ ErrCode SystemService::SendStatus(SSTP_Event_t &event) {
   tmp_i16 = (int16_t)tmp_f32;
   HWORD_TO_PDU_BYTES_INDE_MOVE(buff, tmp_i16, i);
 
-  if (ModuleBase::toolhead() == MACHINE_TYPE_LASER || ModuleBase::toolhead() == MACHINE_TYPE_LASER_10W) {
+  if (  ModuleBase::toolhead() == MACHINE_TYPE_LASER ||
+        ModuleBase::toolhead() == MACHINE_TYPE_LASER_10W ||
+        ModuleBase::toolhead() == MACHINE_TYPE_LASER_20W ||
+        ModuleBase::toolhead() == MACHINE_TYPE_LASER_40W) {
     // laser power
     tmp_u32 = (uint32_t)(laser->power() * 1000);
   } else if (ModuleBase::toolhead() == MACHINE_TYPE_CNC) {

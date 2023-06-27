@@ -121,6 +121,7 @@ class ToolHeadLaser: public ModuleBase {
 
     ErrCode Init(MAC_t &mac, uint8_t mac_index);
     void TurnoffLaserIfNeeded();
+    void PrintInfo(void);
 
     void TurnOn();
     void PwmCtrlDirectly(uint8_t duty);
@@ -131,6 +132,14 @@ class ToolHeadLaser: public ModuleBase {
     void SetPowerLimit(float limit);  // change power_val_, power_pwm_ and power_limit_, may change actual output if current output is beyond limit
     void TryCloseFan();
     bool IsOnline(uint8_t sub_index = 0) { return mac_index_ != MODULE_MAC_INDEX_INVALID; }
+
+    ErrCode SetCrossLightCAN(bool sw);
+    ErrCode GetCrossLightCAN(bool &sw);
+    ErrCode SetFireSensorSensitivityCAN(uint8 sen);
+    ErrCode GetFireSensorSensitivityCAN(uint8 &sen);
+    ErrCode SetFireSensorReportTime(uint16 itv);
+    ErrCode SetCrossLightOffsetCAN(float x, float y);
+    ErrCode GetCrossLightOffsetCAN(float &x, float &y);
 
     // callbacks for HMI event
     ErrCode GetFocus(SSTP_Event_t &event);
@@ -215,10 +224,15 @@ class ToolHeadLaser: public ModuleBase {
     int8_t imu_temperature_;
     bool need_to_turnoff_laser_;
     bool need_to_tell_hmi_;
+
+    bool fire_sensor_sensitivity_update_;
     uint8_t fire_sensor_sensitivity_;
     uint16_t fire_sensor_rawdata_;
+    bool crosslight_offset_update_;
     float crosslight_offset_x, crosslight_offset_y;
     LASER_STATUS laser_status_;
+    bool cross_light_state_update_;
+    bool cross_light_state_;
 
   // Laser Inline Power functions
   public:

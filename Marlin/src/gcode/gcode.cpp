@@ -105,6 +105,9 @@ void GcodeSuite::get_destination_from_command() {
       destination[i] = (axis_relative_modes[i] || relative_mode)
         ? current_position[i] + v
         : (i == E_AXIS) ? v : LOGICAL_TO_NATIVE(v, i);
+      // Add by snapmaker, laser crosslight offset
+      if (i <= Y_AXIS)
+        destination[i] += laser_crosslight_offset[i];
     }
     else
       destination[i] = current_position[i];

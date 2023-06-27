@@ -129,17 +129,36 @@ static void CallbackAckReportSecurity(CanStdDataFrame_t &cmd) {
   }
 }
 
+static void CallbackAckGetCrossLight(CanStdDataFrame_t &cmd) {
+  laser->cross_light_state_ = cmd.data[0];
+  laser->cross_light_state_update_ = true;
+}
+
+static void CallbackAckGetFireSensorSensitivity(CanStdDataFrame_t &cmd) {
+  laser->fire_sensor_sensitivity_ = cmd.data[0];
+  laser->fire_sensor_sensitivity_update_ = true;
+}
+
+static void CallbackAckGetCrossLightOffset(CanStdDataFrame_t &cmd) {
+  laser->crosslight_offset_x = *(float *)(&cmd.data[0]);
+  laser->crosslight_offset_y = *(float *)(&cmd.data[4]);
+  laser->crosslight_offset_update_ = true;
+}
+
+static void CallbackAckReportFireSensorRawData(CanStdDataFrame_t &cmd) {
+  laser->fire_sensor_rawdata_ = cmd.data[0] | (cmd.data[1]<<8);
+  LOG_I("frd: %d\n", laser->fire_sensor_rawdata_);
+}
+
+
 ErrCode ToolHeadLaser::Init(MAC_t &mac, uint8_t mac_index) {
-  ErrCode ret;
-
-  CanExtCmd_t cmd;
-  uint8_t     func_buffer[2*12+2];
-
+  ErrCode       ret;
+  CanExtCmd_t   cmd;
   Function_t    function;
-  message_id_t  message_id[12];
+  uint8_t       func_buffer[2*32+2];
+  message_id_t  message_id[32];
 
   LOG_I("\tGot toolhead Laser!\n");
-
   if (axis_to_port[E_AXIS] != PORT_8PIN_1) {
     LOG_E("toolhead Laser failed: Please use the <M1029 E1> set E port\n");
     return E_HARDWARE;
@@ -156,7 +175,6 @@ ErrCode ToolHeadLaser::Init(MAC_t &mac, uint8_t mac_index) {
   cmd.mac    = mac;
   cmd.data   = func_buffer;
   cmd.length = 1;
-
   cmd.data[MODULE_EXT_CMD_INDEX_ID] = MODULE_EXT_CMD_GET_FUNCID_REQ;
 
   // try to get function ids from module
@@ -174,9 +192,30 @@ ErrCode ToolHeadLaser::Init(MAC_t &mac, uint8_t mac_index) {
     if (function.id == MODULE_FUNC_GET_LASER_FOCUS) {
       message_id[i]     = canhost.RegisterFunction(function, CallbackAckLaserFocus);
       msg_id_get_focus_ = message_id[i];
-    } else if (function.id == MODULE_FUNC_REPORT_SECURITY_STATUS) {
+    }
+
+    else if (function.id == MODULE_FUNC_REPORT_SECURITY_STATUS) {
       message_id[i] = canhost.RegisterFunction(function, CallbackAckReportSecurity);
-    } else {
+    }
+
+    else if (function.id == MODULE_FUNC_GET_CROSSLIGHT_STATE) {
+      message_id[i] = canhost.RegisterFunction(function, CallbackAckGetCrossLight);
+    }
+
+    else if (function.id == MODULE_FUNC_GET_FIRE_SENSOR_SENSITIVITY) {
+      message_id[i] = canhost.RegisterFunction(function, CallbackAckGetFireSensorSensitivity);
+    }
+
+    else if (function.id == MODULE_FUNC_GET_CROSSLIGHT_OFFSET) {
+      message_id[i] = canhost.RegisterFunction(function, CallbackAckGetCrossLightOffset);
+    }
+
+    else if (function.id == MODULE_FUNC_REPORT_FIRE_SENSOR_RAWDATA) {
+      message_id[i] = canhost.RegisterFunction(function, CallbackAckReportFireSensorRawData);
+    }
+
+    // Other unuse
+    else {
       message_id[i] = canhost.RegisterFunction(function, NULL);
     }
 
@@ -185,7 +224,6 @@ ErrCode ToolHeadLaser::Init(MAC_t &mac, uint8_t mac_index) {
   }
 
   ret = canhost.BindMessageID(cmd, message_id);
-
   Tim1PwmInit();
   if (MODULE_DEVICE_ID_10W_LASER == device_id() || MODULE_DEVICE_ID_1_6_W_LASER == device_id())
     esp32_.Init(&MSerial3, EXECUTOR_SERIAL_IRQ_PRIORITY);
@@ -226,6 +264,42 @@ void ToolHeadLaser::TurnoffLaserIfNeeded() {
   if (is_disable_laser) {
     LaserControl(0);
   }
+}
+
+/*
+  power_limit_pwm_ = 255;
+  power_pwm_   = 0;
+  power_val_   = 0;
+  mac_index_   = MODULE_MAC_INDEX_INVALID;
+  state_ = TOOLHEAD_LASER_STATE_OFFLINE;
+  focus_ = TOOLHEAD_LASER_CAMERA_FOCUS_MAX / 1000;
+  fan_state_ = TOOLHEAD_LASER_FAN_STATE_CLOSED;
+  fan_tick_  = 0;
+  msg_id_set_fan_   = MODULE_MESSAGE_ID_INVALID;
+  msg_id_get_focus_ = MODULE_MESSAGE_ID_INVALID;
+  timer_in_process_ = 0;
+
+  security_status_ = 0;
+  laser_temperature_ = 0;
+  imu_temperature_   = 0;
+  need_to_turnoff_laser_ = false;
+  need_to_tell_hmi_ = false;
+  laser_status_ = LASER_DISABLE;
+  laser_pwm_pin_checked_ = false;
+  pwm_pin_pullup_state_ = 0xff;
+  pwm_pin_pulldown_state_ = 0xff;
+  fire_sensor_sensitivity_ = 0;
+  crosslight_offset_x = crosslight_offset_y = INVALID_OFFSET;
+*/
+void ToolHeadLaser::PrintInfo(void) {
+  LOG_I("power limit pwm %d\n", power_limit_pwm_);
+  LOG_I("power_pwm_ %d\n", power_pwm_);
+  LOG_I("power_val_ %f\n", power_val_);
+  LOG_I("security_status_ %d\n", security_status_);
+  LOG_I("laser_temperature_ %d\n", laser_temperature_);
+  LOG_I("imu_temperature_ %d\n", imu_temperature_);
+  LOG_I("fire_sensor_sensitivity_ %d\n", fire_sensor_sensitivity_);
+  LOG_I("crosslight_offset_x %f, crosslight_offset_y %f\n", crosslight_offset_x, crosslight_offset_y);
 }
 
 uint16_t ToolHeadLaser::tim_pwm() {
@@ -376,6 +450,127 @@ void ToolHeadLaser::TryCloseFan() {
       SetFanPower(0);
     }
   }
+}
+
+ErrCode ToolHeadLaser::SetCrossLightCAN(bool sw) {
+  CanStdFuncCmd_t cmd;
+  uint8_t buffer[1];
+
+  buffer[0]     = sw;
+  cmd.id        = MODULE_FUNC_SET_CROSSLIGHT;
+  cmd.data      = buffer;
+  cmd.length    = 1;
+
+  return canhost.SendStdCmd(cmd, 0);
+}
+
+ErrCode ToolHeadLaser::GetCrossLightCAN(bool &sw) {
+  CanStdFuncCmd_t cmd;
+  cmd.id        = MODULE_FUNC_GET_CROSSLIGHT_STATE;
+  cmd.length    = 0;
+
+  cross_light_state_update_ = false;
+  ErrCode ret = canhost.SendStdCmd(cmd, 0);
+  if (E_SUCCESS != ret) {
+    return ret;
+  }
+
+  uint32_t max_try = 200;
+  while(!cross_light_state_update_ && max_try--) vTaskDelay(pdMS_TO_TICKS(1));
+  if (max_try) {
+    sw = cross_light_state_;
+    return E_SUCCESS;
+  }
+  else {
+    return E_TIMEOUT;
+  }
+}
+
+ErrCode ToolHeadLaser::SetFireSensorSensitivityCAN(uint8 sen) {
+  CanStdFuncCmd_t cmd;
+  uint8_t buffer[1];
+
+  buffer[0]     = sen;
+  cmd.id        = MODULE_FUNC_SET_FIRE_SENSOR_SENSITIVITY;
+  cmd.data      = buffer;
+  cmd.length    = 1;
+
+  return canhost.SendStdCmd(cmd, 0);
+}
+
+ErrCode ToolHeadLaser::GetFireSensorSensitivityCAN(uint8 &sen) {
+  CanStdFuncCmd_t cmd;
+  cmd.id        = MODULE_FUNC_GET_FIRE_SENSOR_SENSITIVITY;
+  cmd.length    = 0;
+
+  fire_sensor_sensitivity_update_ = false;
+  ErrCode ret = canhost.SendStdCmd(cmd, 0);
+  if (E_SUCCESS != ret) {
+    return ret;
+  }
+
+  uint32_t max_try = 200;
+  while(!fire_sensor_sensitivity_update_ && max_try--) vTaskDelay(pdMS_TO_TICKS(1));
+  if (max_try) {
+    sen = fire_sensor_sensitivity_;
+    return E_SUCCESS;
+  }
+  else {
+    return E_TIMEOUT;
+  }
+}
+
+ErrCode ToolHeadLaser::SetFireSensorReportTime(uint16 itv) {
+  CanStdFuncCmd_t cmd;
+  uint8_t buffer[2];
+
+  buffer[0]     = itv & 0xFF;
+  buffer[1]     = (itv>>8) & 0xFF;
+  cmd.id        = MODULE_FUNC_SET_FIRE_SENSOR_REPORT_TIME;
+  cmd.data      = buffer;
+  cmd.length    = 2;
+
+  return canhost.SendStdCmd(cmd, 0);
+}
+
+ErrCode ToolHeadLaser::SetCrossLightOffsetCAN(float x, float y) {
+  CanStdFuncCmd_t cmd;
+  uint8_t buffer[8];
+
+  *(float *)(&buffer[0]) = x;
+  *(float *)(&buffer[4]) = y;
+  cmd.id        = MODULE_FUNC_SET_CROSSLIGHT_OFFSET;
+  cmd.data      = buffer;
+  cmd.length    = 8;
+
+  return canhost.SendStdCmd(cmd, 0);
+}
+
+ErrCode ToolHeadLaser::GetCrossLightOffsetCAN(float &x, float &y) {
+  CanStdFuncCmd_t cmd;
+  cmd.id        = MODULE_FUNC_GET_CROSSLIGHT_OFFSET;
+  cmd.length    = 0;
+
+  crosslight_offset_update_ = false;
+  ErrCode ret = canhost.SendStdCmd(cmd, 0);
+  if (E_SUCCESS != ret) {
+    return ret;
+  }
+
+  uint32_t max_try = 200;
+  while(!crosslight_offset_update_ && max_try--) vTaskDelay(pdMS_TO_TICKS(1));
+  if (max_try) {
+    x = crosslight_offset_x;
+    y = crosslight_offset_y;
+  }
+  else {
+    return E_TIMEOUT;
+  }
+
+  if (INVALID_OFFSET == crosslight_offset_x || INVALID_OFFSET == crosslight_offset_y)
+    return E_FAILURE;
+  else
+    return E_SUCCESS;
 }
 
 ErrCode ToolHeadLaser::LoadFocus() {
@@ -602,6 +797,11 @@ ErrCode ToolHeadLaser::ReadBluetoothInfo(LaserCameraCommand cmd, uint8_t *out, u
   SSTP_Event_t  event = {cmd, 0, 0, NULL};
   ErrCode  ret = E_SUCCESS;
 
+  if (MODULE_DEVICE_ID_20W_LASER == device_id() || MODULE_DEVICE_ID_40W_LASER == device_id()) {
+    LOG_E("Laser 20W or 40W do not have any bluetooth\n");
+    return E_FAILURE;
+  }
+
   for (int i = 1; i < 4; i++) {
     esp32_.FlushInput();
 
@@ -650,7 +850,7 @@ ErrCode ToolHeadLaser::SetBluetoothInfo(LaserCameraCommand cmd, uint8_t *info, u
   ErrCode  ret;
 
   if (MODULE_DEVICE_ID_20W_LASER == device_id() || MODULE_DEVICE_ID_40W_LASER == device_id()) {
-    LOG_E("Laser 20W or 40W do not have blutooth\n", 111);
+    LOG_E("Laser 20W or 40W do not have any blutooth\n");
     return E_INVALID_CMD;
   }
 
@@ -693,7 +893,7 @@ ErrCode ToolHeadLaser::SetCameraBtName(SSTP_Event_t &event) {
   ErrCode err = E_FAILURE;
 
   if (MODULE_DEVICE_ID_20W_LASER == device_id() || MODULE_DEVICE_ID_40W_LASER == device_id()) {
-    LOG_E("Laser 20W or 40W do not have blutooth\n", 111);
+    LOG_E("Laser 20W or 40W do not have any blutooth\n");
     err = E_INVALID_CMD;
     event.data   = &err;
     event.length = 1;
@@ -715,7 +915,7 @@ ErrCode ToolHeadLaser::GetCameraBtName(SSTP_Event_t &event) {
   ErrCode ret;
 
   if (MODULE_DEVICE_ID_20W_LASER == device_id() || MODULE_DEVICE_ID_40W_LASER == device_id()) {
-    LOG_E("Laser 20W or 40W do not have blutooth\n", 111);
+    LOG_E("Laser 20W or 40W do not have any blutooth\n");
     ErrCode err = E_INVALID_CMD;
     event.data   = &err;
     event.length = 1;
@@ -747,7 +947,7 @@ ErrCode ToolHeadLaser::GetCameraBtMAC(SSTP_Event_t &event) {
   ErrCode ret;
 
   if (MODULE_DEVICE_ID_20W_LASER == device_id() || MODULE_DEVICE_ID_40W_LASER == device_id()) {
-    LOG_E("Laser 20W or 40W do not have blutooth\n", 111);
+    LOG_E("Laser 20W or 40W do not have any blutooth\n");
     ErrCode err = E_INVALID_CMD;
     event.data   = &err;
     event.length = 1;
@@ -785,7 +985,7 @@ ErrCode ToolHeadLaser::ReadBluetoothVer() {
   ErrCode ret = E_SUCCESS;
 
   if (MODULE_DEVICE_ID_20W_LASER == device_id() || MODULE_DEVICE_ID_40W_LASER == device_id()) {
-    LOG_E("Laser 20W or 40W do not have blutooth\n", 111);
+    LOG_E("Laser 20W or 40W do not have any blutooth\n");
     return E_FAILURE;
   }
 
@@ -808,7 +1008,7 @@ void ToolHeadLaser::SetCameraLight(uint8_t state) {
   uint8_t buff[1];
 
   if (MODULE_DEVICE_ID_20W_LASER == device_id() || MODULE_DEVICE_ID_40W_LASER == device_id()) {
-    LOG_E("Laser 20W or 40W do not have blutooth\n", 111);
+    LOG_E("Laser 20W or 40W do not have blutooth\n");
     return;
   }
 
@@ -824,7 +1024,7 @@ ErrCode ToolHeadLaser::SetAutoFocusLight(SSTP_Event_t &event) {
   uint8_t can_buffer[1];
 
   if (MODULE_DEVICE_ID_20W_LASER == device_id() || MODULE_DEVICE_ID_40W_LASER == device_id()) {
-    LOG_E("Laser 20W or 40W do not have blutooth\n", 111);
+    LOG_E("Laser 20W or 40W do not have any focuslight\n");
     uint8_t err = E_INVALID_CMD;
     event.data   = &err;
     event.length = 1;
@@ -1007,67 +1207,51 @@ ErrCode ToolHeadLaser::LaserGetHWVersion() {
 }
 
 ErrCode ToolHeadLaser::SetCrossLight(SSTP_Event_t &event) {
-  CanStdFuncCmd_t cmd;
-  uint8_t can_buffer[1];
-
-  can_buffer[0] = !!event.data[0];
-  cmd.id        = MODULE_FUNC_SET_CROSSLIGHT;
-  cmd.data      = can_buffer;
-  cmd.length    = 1;
-
   uint8_t buff[1];
-  if (canhost.SendStdCmdSync(cmd, 2000) == E_SUCCESS) {
-    buff[0] = 0;
-  } else {
-    buff[0] = 1;
-  }
 
+  // Do we need to check if this laser support this operation?
+  // Or we can just set and return the result
+  // May be, just set and return the result would be more compatible
+
+  // if (MODULE_DEVICE_ID_20W_LASER != device_id() && MODULE_DEVICE_ID_40W_LASER != device_id()) {
+  //   LOG_E("This laser do not have any crosslight\n");
+  //   uint8_t err = E_INVALID_CMD;
+  //   event.data   = &err;
+  //   event.length = 1;
+  //   return hmi.Send(event);
+  // }
+
+  buff[0] = SetCrossLightCAN(!!event.data[0]);
   SSTP_Event_t event_hmi = {EID_SETTING_ACK, SETTINGS_OPC_SET_CROSSLIGHT};
   event_hmi.length = 1;
   event_hmi.data = buff;
-
   return hmi.Send(event_hmi);
 }
 
 ErrCode ToolHeadLaser::GetCrossLight(SSTP_Event_t &event) {
-  CanStdFuncCmd_t cmd;
-  uint8_t buff[1] = {0};
+  bool sw;
+  uint8_t buff[2];
 
-  cmd.id        = MODULE_FUNC_GET_CROSSLIGHT_STATE;
-  cmd.data      = buff;
-  cmd.length    = 1;
-
-  ErrCode ret;
-  ret = canhost.SendStdCmdSync(cmd, 2000);
-  if (ret != E_SUCCESS) {
-    return ret;
-  }
+  // Do we need to check if this laser support this operation?
+  // Or we can just set and return the result
+  // May be, just set and return the result would be more compatible
 
   SSTP_Event_t event_tmp = {EID_SETTING_ACK, SETTINGS_OPC_GET_CROSSLIGHT};
-  buff[0] = cmd.data[0];
-  event_tmp.length = 1;
+  buff[0] = GetCrossLightCAN(sw);
+  buff[1] = sw;
+  event_tmp.length = 2;
   event_tmp.data = buff;
-  hmi.Send(event_tmp);
-
-  return E_SUCCESS;
+  return hmi.Send(event_tmp);
 }
 
 ErrCode ToolHeadLaser::SetFireSensorSensitivity(SSTP_Event_t &event) {
-  CanStdFuncCmd_t cmd;
-  uint8_t can_buffer[1];
-
-  can_buffer[0] = event.data[0];
-  cmd.id        = MODULE_FUNC_SET_FIRE_SENSOR_SENSITIVITY;
-  cmd.data      = can_buffer;
-  cmd.length    = 1;
-
   uint8_t buff[1];
-  if (canhost.SendStdCmdSync(cmd, 2000) == E_SUCCESS) {
-    buff[0] = 0;
-  } else {
-    buff[0] = 1;
-  }
 
+  // Do we need to check if this laser support this operation?
+  // Or we can just set and return the result
+  // May be, just set and return the result would be more compatible
+
+  buff[0] = SetFireSensorSensitivityCAN(event.data[0]);
   SSTP_Event_t event_hmi = {EID_SETTING_ACK, SETTINGS_OPC_SET_FIRE_SENSOR_SENSITIVITY};
   event_hmi.length = 1;
   event_hmi.data = buff;
@@ -1075,24 +1259,17 @@ ErrCode ToolHeadLaser::SetFireSensorSensitivity(SSTP_Event_t &event) {
 }
 
 ErrCode ToolHeadLaser::GetFireSensorSensitivity(SSTP_Event_t &event) {
-  CanStdFuncCmd_t cmd;
-  uint8_t buff[2] = {0};
+  uint8 fss;
+  uint8_t buff[2];
 
-  cmd.id        = MODULE_FUNC_GET_FIRE_SENSOR_SENSITIVITY;
-  cmd.data      = buff;
-  cmd.length    = 1;
-
-  ErrCode ret;
-  ret = canhost.SendStdCmdSync(cmd, 2000);
-  if (E_SUCCESS == ret) {
-    buff[0] = 0;
-  } else {
-    buff[0] = 1;
-  }
+  // Do we need to check if this laser support this operation?
+  // Or we can just set and return the result
+  // May be, just set and return the result would be more compatible
 
   SSTP_Event_t event_tmp = {EID_SETTING_ACK, SETTINGS_OPC_GET_FIRE_SENSOR_SENSITIVITY};
-  buff[1] = cmd.data[0];
-  event_tmp.length = 1;
+  buff[0] = GetFireSensorSensitivityCAN(fss);
+  buff[1] = fss;
+  event_tmp.length = 2;
   event_tmp.data = buff;
   return hmi.Send(event_tmp);
 }
@@ -1105,76 +1282,48 @@ void ToolHeadLaser::TellSecurityStatus() {
 }
 
 ErrCode ToolHeadLaser::SetFireSensorReportTime(SSTP_Event_t &event) {
-  CanStdFuncCmd_t cmd;
-  uint8_t can_buffer[2];
-
-  can_buffer[0] = event.data[0];
-  can_buffer[1] = event.data[1];
-  cmd.id        = MODULE_FUNC_SET_FIRE_SENSOR_REPORT_TIME;
-  cmd.data      = can_buffer;
-  cmd.length    = 2;
-
   uint8_t buff[1];
-  if (canhost.SendStdCmdSync(cmd, 2000) == E_SUCCESS) {
-    buff[0] = 0;
-  } else {
-    buff[0] = 1;
-  }
 
+  // Do we need to check if this laser support this operation?
+  // Or we can just set and return the result
+  // May be, just set and return the result would be more compatible
+
+  buff[0] = SetFireSensorReportTime(event.data[0] | (event.data[1]<<8));
   SSTP_Event_t event_hmi = {EID_SETTING_ACK, SETTINGS_OPC_SET_FIRE_SENSOR_REPORT_TIME};
   event_hmi.length = 1;
   event_hmi.data = buff;
-
   return hmi.Send(event_hmi);
 }
 
 ErrCode ToolHeadLaser::SetCrosslightOffset(SSTP_Event_t &event) {
-  CanStdFuncCmd_t cmd;
-  uint8_t can_buffer[8];
-
-  float *fx = (float *)(&can_buffer[0]), *fy = (float *)(&can_buffer[4]);
-  int32_t x = *(int32_t *)(&event.data[0]), y = *(int32_t *)(&event.data[4]);
-  *fx = (float)x / 1000, *fy = (float)y / 1000;
-  cmd.id        = MODULE_FUNC_SET_CROSSLIGHT_OFFSET;
-  cmd.data      = can_buffer;
-  cmd.length    = 8;
-
   uint8_t buff[1];
-  if (canhost.SendStdCmdSync(cmd, 2000) == E_SUCCESS) {
-    buff[0] = 0;
-  } else {
-    buff[0] = 1;
-  }
 
+  // Do we need to check if this laser support this operation?
+  // Or we can just set and return the result
+  // May be, just set and return the result would be more compatible
+
+  float fx = *(float *)(&event.data[0]), fy = *(float *)(&event.data[4]);
+  buff[0] = SetCrossLightOffsetCAN(fx, fy);
   SSTP_Event_t event_hmi = {EID_SETTING_ACK, SETTINGS_OPC_SET_CROSSLIGHT_OFFSET};
   event_hmi.length = 1;
   event_hmi.data = buff;
-
   return hmi.Send(event_hmi);
 }
 
 ErrCode ToolHeadLaser::GetCrosslightOffset(SSTP_Event_t &event) {
-  CanStdFuncCmd_t cmd;
-  uint8_t buff[9] = {0};
+  float fx, fy;
+  uint8_t buff[9];
 
-  cmd.id        = MODULE_FUNC_GET_CROSSLIGHT_OFFSET;
-  cmd.data      = buff;
-  cmd.length    = 1;
+  // Do we need to check if this laser support this operation?
+  // Or we can just set and return the result
+  // May be, just set and return the result would be more compatible
 
-  ErrCode ret;
-  ret = canhost.SendStdCmdSync(cmd, 2000);
   SSTP_Event_t event_tmp = {EID_SETTING_ACK, SETTINGS_OPC_GET_CROSSLIGHT_OFFSET};
-  if (ret != E_SUCCESS) {
-    buff[0] = E_FAILURE;
-    event_tmp.length = 1;
-    event_tmp.data = buff;
-    return hmi.Send(event_tmp);
-  }
-
-  float fx = *(float *)(&buff[0]), fy = *(float *)(&buff[4]);
-  buff[0] = E_SUCCESS;
+  buff[0] = GetCrossLightOffsetCAN(fx, fy);
   int32_t *x = (int32_t *)&buff[1], *y = (int32_t *)&buff[1+4];
   *x = (int32_t)(fx * 1000), *y = (int32_t)(fy * 1000);
+  // Integer pointer must align to 4? So this log below have test and it work!
+  // LOG_I("crosslight offset: x = %d, y = %d\n", *x, *y);
   event_tmp.length = 9;
   event_tmp.data = buff;
   return hmi.Send(event_tmp);

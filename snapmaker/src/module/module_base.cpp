@@ -56,7 +56,7 @@ ModuleBase *static_modules[] = {
   &printer_dualextruder,
   &laser_10w,
   &laser_20w,
-  &laser_20w,
+  &laser_40w,
   NULL
 };
 
