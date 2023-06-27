@@ -8,7 +8,7 @@
 
 
 // #define SHAPER_LOG_ENABLE
-#define ENABLE_DIR_ELIMINATE
+// #define ENABLE_DIR_ELIMINATE
 // #define LOG_MIDDLE_POS
 // #define LOG_MOTION_INFO
 // #define LOG_PRINT_POS
@@ -603,24 +603,24 @@ bool moveShaperWindowToNext() {
 
 class AxisMng {
 public:
-  void init(MoveQueue *mq, uint32_t m2t);
-  void loop(void);
-  bool planner_sync(void);
-  void load_shaper_setting(void);
-  bool update_shaper(void);
-  bool input_shaper_set(int axis, int type, float freq, float dampe);
-  bool input_shaper_get(int axis, int &type, float &freq, float &dampe);
-  bool endisable_shaper(bool endisable);
-  bool reset_shaper(void);
-  void log_xy_shpaer(void);
-  bool prepare(uint8_t m_idx);
-  void logShaperWindows();
-  bool tgfValid();
-  void abort();
-  void updateOldestPluesTick();
-  bool req_endisable_shaper(bool endisble);
-  bool req_update_shaper(void);
-  bool req_reset_shaper(void);
+  CRITICAL void init(MoveQueue *mq, uint32_t m2t);
+  CRITICAL void loop(void);
+  CRITICAL bool planner_sync(void);
+  CRITICAL void load_shaper_setting(void);
+  CRITICAL bool update_shaper(void);
+  CRITICAL bool input_shaper_set(int axis, int type, float freq, float dampe);
+  CRITICAL bool input_shaper_get(int axis, int &type, float &freq, float &dampe);
+  CRITICAL bool endisable_shaper(bool endisable);
+  CRITICAL bool reset_shaper(void);
+  CRITICAL void log_xy_shpaer(void);
+  CRITICAL bool prepare(uint8_t m_idx);
+  CRITICAL void logShaperWindows();
+  CRITICAL bool tgfValid();
+  CRITICAL void abort();
+  CRITICAL void updateOldestPluesTick();
+  CRITICAL bool req_endisable_shaper(bool endisble);
+  CRITICAL bool req_update_shaper(void);
+  CRITICAL bool req_reset_shaper(void);
 
   AxisInputShaper *findNearestPrintTickAxis() {
     AxisInputShaper *nearest_axis = nullptr;

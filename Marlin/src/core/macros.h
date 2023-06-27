@@ -45,6 +45,7 @@
 #define _O1          __attribute__((optimize("O1")))
 #define _O2          __attribute__((optimize("O2")))
 #define _O3          __attribute__((optimize("O3")))
+#define CRITICAL     __attribute__((section(".critical")))
 
 // Clock speed factors
 #if !defined(CYCLES_PER_MICROSECOND) && !(defined(__GD32F1__) || defined(__STM32F1__))

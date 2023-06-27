@@ -1415,9 +1415,10 @@ void Planner::shaped_loop() {
   block_num = movesplanned();
   if (step_generating) {
     uint32_t prepare_time_ms = steps_seq.getBufMilliseconds();
-    if (prepare_time_ms > 5) {
-      NOMORE(prepare_time_ms, 50u);
-      vTaskDelay(pdMS_TO_TICKS(prepare_time_ms - 5));
+    if (prepare_time_ms > 10) {
+      // NOMORE(prepare_time_ms, 50u);
+      // vTaskDelay(pdMS_TO_TICKS(prepare_time_ms - 5));
+      vTaskDelay(pdMS_TO_TICKS(prepare_time_ms/2));
     }
     else {
       if (has_gen_steps && block_num) {

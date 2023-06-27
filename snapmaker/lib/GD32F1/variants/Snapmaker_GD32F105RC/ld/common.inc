@@ -61,6 +61,8 @@ SECTIONS
          */
         *(.stm32.interrupt_vector)
 
+        *(.critical .critical.*)
+
         /*
          * Program code and vague linking
          */

@@ -44,7 +44,7 @@ class MoveQueue {
 public:
   MoveQueue();
   void init(uint32_t s2t);
-  void update_shaper_param(uint32_t mswt, uint32_t mswrdt);
+  CRITICAL void update_shaper_param(uint32_t mswt, uint32_t mswrdt);
   FORCE_INLINE constexpr uint8_t nextMoveIndex(const uint8_t m_index) { return MOVE_MOD(m_index + 1);};
   FORCE_INLINE constexpr uint8_t prevMoveIndex(const uint8_t m_index) { return MOVE_MOD(m_index - 1);};
   FORCE_INLINE bool isBetween(const uint8_t m_index) { return (m_index != move_head) && (MOVE_MOD(move_head - m_index) + MOVE_MOD(m_index - move_tail)) == MOVE_MOD(move_head - move_tail);};
@@ -57,17 +57,17 @@ public:
     return move.start_pos[axis] + (move.start_v + 0.5f * move.accelerate * delta_time) * delta_time * axis_r;
   };
 
-  void reset();
-  void addEmptyMove(uint32_t time);
-  void addSyncMove(int32_t sync_pos[]);
-  Move *addMove(float sv, float ev, float acc, float dist, float axis_r[], uint32_t t);
-  bool genMoves(block_t* block, bool &drop);
-  void moveTailForward(uint32_t print_tick);
-  void reqResetEAxis(void);
-  void reqResetBAxis(void);
-  bool haveMotion();
-  float spandTimeWindow();
-  void log();
+  CRITICAL void reset();
+  CRITICAL void addEmptyMove(uint32_t time);
+  CRITICAL void addSyncMove(int32_t sync_pos[]);
+  CRITICAL Move *addMove(float sv, float ev, float acc, float dist, float axis_r[], uint32_t t);
+  CRITICAL bool genMoves(block_t* block, bool &drop);
+  CRITICAL void moveTailForward(uint32_t print_tick);
+  CRITICAL void reqResetEAxis(void);
+  CRITICAL void reqResetBAxis(void);
+  CRITICAL bool haveMotion();
+  CRITICAL float spandTimeWindow();
+  CRITICAL void log();
 
 public:
   static uint32_t ms2tick;

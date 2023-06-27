@@ -1359,11 +1359,11 @@ HAL_STEP_TIMER_ISR() {
   HAL_timer_isr_epilogue(STEP_TIMER_NUM);
 }
 
-
 void Stepper::ts_isr() {
   static bool last_got_step = false;
   uint16_t entry_tick;
   uint32_t max_try;
+  uint32_t have_counted_tick = 0;
 
 __start:
   #ifdef SHAPER_LOG_ENABLE
@@ -1436,6 +1436,39 @@ __start:
   entry_tick = HAL_timer_get_count(STEP_TIMER_NUM);
   if (sif_valid) {
     if (step_time_dir.out_step) {
+      // Set direction and move bit
+      axis_did_move = step_time_dir.move_bits;
+      if (step_time_dir.dir) {
+        CBI(current_direction_bits, step_time_dir.axis);
+      }
+      else {
+        SBI(current_direction_bits, step_time_dir.axis);
+      }
+      if (current_direction_bits != last_direction_bits) {
+        last_direction_bits = current_direction_bits;
+        // if (-1 != fall_edge_axis) {
+        //   max_try = 100;
+        //   while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
+        //   if (X_AXIS == fall_edge_axis) {
+        //     PULSE_STOP(X);
+        //   }
+        //   else if(Y_AXIS == fall_edge_axis) {
+        //     PULSE_STOP(Y);
+        //   }
+        //   else if(Z_AXIS == fall_edge_axis) {
+        //     PULSE_STOP(Z);
+        //   }
+        //   else if(E_AXIS == fall_edge_axis) {
+        //     PULSE_STOP(E);
+        //   }
+        //   else if(B_AXIS == fall_edge_axis) {
+        //     PULSE_STOP(B);
+        //   }
+        //   fall_edge_axis = -1;
+        // }
+        set_directions();
+      }
+
       fall_edge_axis = step_time_dir.axis;
       if (X_AXIS == step_time_dir.axis) {
         PULSE_START(X);
@@ -1465,11 +1498,11 @@ __start:
     else  {
       sif_valid = false;
       // wait for some milliseconds
-      wait_sif_countdown = 0;
+      wait_sif_countdown = STEPPER_WAIT_TIME_MS;
     }
   }
   else {
-    if (steps_seq.getBufMilliseconds() > 100) {
+    if (steps_seq.getBufMilliseconds() > STEPPER_WAIT_TIME_MS) {
       if(steps_seq.popQueue(&step_time_dir)) {
         sif_valid = true;
       }
@@ -1486,8 +1519,8 @@ __start:
         else {
           sif_valid = false;
           // wait for some milliseconds
-          // TODO: here may cause lose step
-          wait_sif_countdown = 0;
+          // TODO: here may cause lose step ?
+          wait_sif_countdown = STEPPER_WAIT_TIME_MS;
         }
       }
     }
@@ -1514,48 +1547,12 @@ __start:
       }
     }
 
-    if (step_time_dir.out_step) {
-      // Set direction and move bit
-      axis_did_move = step_time_dir.move_bits;
-      if (step_time_dir.dir) {
-        CBI(current_direction_bits, step_time_dir.axis);
-      }
-      else {
-        SBI(current_direction_bits, step_time_dir.axis);
-      }
-      if (current_direction_bits != last_direction_bits) {
-        last_direction_bits = current_direction_bits;
-        if (-1 != fall_edge_axis) {
-          max_try = 100;
-          while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
-          if (X_AXIS == fall_edge_axis) {
-            PULSE_STOP(X);
-          }
-          else if(Y_AXIS == fall_edge_axis) {
-            PULSE_STOP(Y);
-          }
-          else if(Z_AXIS == fall_edge_axis) {
-            PULSE_STOP(Z);
-          }
-          else if(E_AXIS == fall_edge_axis) {
-            PULSE_STOP(E);
-          }
-          else if(B_AXIS == fall_edge_axis) {
-            PULSE_STOP(B);
-          }
-          fall_edge_axis = -1;
-        }
-        set_directions();
-      }
-    }
-
     // TODO:
     // 1) continue short pluse???
     // 2) HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv)) or HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv) + cur_tick);
     // 3) limite the continue pluses
     uint16_t cur_tick = HAL_timer_get_count(STEP_TIMER_NUM);
-    if (step_time_dir.itv > (cur_tick + 4 * STEPPER_TIMER_TICKS_PER_US)) {
-      HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv));
+    if ((step_time_dir.itv + have_counted_tick) > (cur_tick + 4 * STEPPER_TIMER_TICKS_PER_US)) {
       if (-1 != fall_edge_axis) {
         max_try = 100;
         while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
@@ -1576,8 +1573,11 @@ __start:
         }
         fall_edge_axis = -1;
       }
+      HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv + have_counted_tick));
     }
     else {
+      have_counted_tick += cur_tick;
+
       // TODO: shoule clear the step timer??
       if (-1 != fall_edge_axis) {
         max_try = 100;
@@ -1599,7 +1599,7 @@ __start:
         }
         fall_edge_axis = -1;
       }
-      timer_set_count(STEP_TIMER_DEV, hal_timer_t(0));
+      // timer_set_count(STEP_TIMER_DEV, hal_timer_t(0));
       goto __start;
     }
   }

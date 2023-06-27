@@ -355,11 +355,11 @@ class Planner {
       static bool abort_on_endstop_hit;
     #endif
 
-    static bool req_clear_block();
-    static void do_block_clear();
-    static bool has_motion_queue();
-    static void shaped_loop();
-    static bool genStep();
+    CRITICAL static bool req_clear_block();
+    CRITICAL static void do_block_clear();
+    CRITICAL static bool has_motion_queue();
+    CRITICAL static void shaped_loop();
+    CRITICAL static bool genStep();
 
   private:
 

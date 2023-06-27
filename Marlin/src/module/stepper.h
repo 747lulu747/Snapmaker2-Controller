@@ -242,6 +242,8 @@ struct step_runout {
   uint32_t sys_time_ms;
 };
 
+#define STEPPER_WAIT_TIME_MS   (100)
+
 class Stepper {
 
   public:
@@ -389,7 +391,7 @@ class Stepper {
 
     // The ISR scheduler
     static void isr();
-    static void ts_isr();
+    CRITICAL static void ts_isr();
 
     // The stepper pulse phase ISR
     static void stepper_pulse_phase_isr();
@@ -515,7 +517,7 @@ class Stepper {
     }
 
     // Set direction bits for all steppers
-    static void set_directions();
+    CRITICAL static void set_directions();
 
   private:
 
