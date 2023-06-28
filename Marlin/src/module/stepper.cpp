@@ -1363,9 +1363,17 @@ void Stepper::ts_isr() {
   static bool last_got_step = false;
   uint16_t entry_tick;
   uint32_t max_try;
-  uint32_t have_counted_tick = 0;
+  uint32_t step_interval_sum = 0;
+  uint32_t loop_cnt = 0;
+  int fall_edge_axis;
+
+  // Program timer compare for the maximum period, so it does NOT
+  // flag an interrupt while this ISR is running - So changes from small
+  // periods to big periods are respected and the timer does not reset to 0
+  HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(HAL_TIMER_TYPE_MAX));
 
 __start:
+  loop_cnt++;
   #ifdef SHAPER_LOG_ENABLE
   HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(HAL_TIMER_TYPE_MAX));
   return;
@@ -1376,11 +1384,6 @@ __start:
   #ifdef DEBUG_IO
   WRITE(DEBUG_IO, 1);
   #endif
-
-  // Program timer compare for the maximum period, so it does NOT
-  // flag an interrupt while this ISR is running - So changes from small
-  // periods to big periods are respected and the timer does not reset to 0
-  HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(HAL_TIMER_TYPE_MAX));
 
   // checking power loss here because when no moves in block buffer, ISR will not
   // execute to endstop.update(), then we cannot check power loss there.
@@ -1432,8 +1435,7 @@ __start:
     return;
   }
 
-  int fall_edge_axis = -1;
-  entry_tick = HAL_timer_get_count(STEP_TIMER_NUM);
+  fall_edge_axis = -1;
   if (sif_valid) {
     if (step_time_dir.out_step) {
       // Set direction and move bit
@@ -1446,29 +1448,15 @@ __start:
       }
       if (current_direction_bits != last_direction_bits) {
         last_direction_bits = current_direction_bits;
-        // if (-1 != fall_edge_axis) {
-        //   max_try = 100;
-        //   while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
-        //   if (X_AXIS == fall_edge_axis) {
-        //     PULSE_STOP(X);
-        //   }
-        //   else if(Y_AXIS == fall_edge_axis) {
-        //     PULSE_STOP(Y);
-        //   }
-        //   else if(Z_AXIS == fall_edge_axis) {
-        //     PULSE_STOP(Z);
-        //   }
-        //   else if(E_AXIS == fall_edge_axis) {
-        //     PULSE_STOP(E);
-        //   }
-        //   else if(B_AXIS == fall_edge_axis) {
-        //     PULSE_STOP(B);
-        //   }
-        //   fall_edge_axis = -1;
-        // }
         set_directions();
       }
 
+      // DIR TO STEP, delay 62.5 ns
+      entry_tick = HAL_timer_get_count(STEP_TIMER_NUM);
+      max_try = STEPPER_MAX_TRY;
+      while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < (STEPPER_TIMER_TICKS_PER_US>>4)));
+
+      entry_tick = HAL_timer_get_count(STEP_TIMER_NUM);
       fall_edge_axis = step_time_dir.axis;
       if (X_AXIS == step_time_dir.axis) {
         PULSE_START(X);
@@ -1547,60 +1535,52 @@ __start:
       }
     }
 
-    // TODO:
-    // 1) continue short pluse???
+    if (-1 != fall_edge_axis) {
+      max_try = STEPPER_MAX_TRY;
+      while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
+      if (X_AXIS == fall_edge_axis) {
+        PULSE_STOP(X);
+      }
+      else if(Y_AXIS == fall_edge_axis) {
+        PULSE_STOP(Y);
+      }
+      else if(Z_AXIS == fall_edge_axis) {
+        PULSE_STOP(Z);
+      }
+      else if(E_AXIS == fall_edge_axis) {
+        PULSE_STOP(E);
+      }
+      else if(B_AXIS == fall_edge_axis) {
+        PULSE_STOP(B);
+      }
+      fall_edge_axis = -1;
+    }
+
+    // for the low time hole
+    entry_tick = HAL_timer_get_count(STEP_TIMER_NUM);
+
     // 2) HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv)) or HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv) + cur_tick);
     // 3) limite the continue pluses
     uint16_t cur_tick = HAL_timer_get_count(STEP_TIMER_NUM);
-    if ((step_time_dir.itv + have_counted_tick) > (cur_tick + 4 * STEPPER_TIMER_TICKS_PER_US)) {
-      if (-1 != fall_edge_axis) {
-        max_try = 100;
-        while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
-        if (X_AXIS == fall_edge_axis) {
-          PULSE_STOP(X);
-        }
-        else if(Y_AXIS == fall_edge_axis) {
-          PULSE_STOP(Y);
-        }
-        else if(Z_AXIS == fall_edge_axis) {
-          PULSE_STOP(Z);
-        }
-        else if(E_AXIS == fall_edge_axis) {
-          PULSE_STOP(E);
-        }
-        else if(B_AXIS == fall_edge_axis) {
-          PULSE_STOP(B);
-        }
-        fall_edge_axis = -1;
-      }
-      HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv + have_counted_tick));
+    if ((step_time_dir.itv + step_interval_sum) > (cur_tick + 4 * STEPPER_TIMER_TICKS_PER_US)) {
+      HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv + step_interval_sum));
+      return;
     }
     else {
-      have_counted_tick += cur_tick;
+      if (loop_cnt < 10) {
+        step_interval_sum += step_time_dir.itv;
 
-      // TODO: shoule clear the step timer??
-      if (-1 != fall_edge_axis) {
-        max_try = 100;
+        // make sure the low time
+        max_try = STEPPER_MAX_TRY;
         while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
-        if (X_AXIS == fall_edge_axis) {
-          PULSE_STOP(X);
-        }
-        else if(Y_AXIS == fall_edge_axis) {
-          PULSE_STOP(Y);
-        }
-        else if(Z_AXIS == fall_edge_axis) {
-          PULSE_STOP(Z);
-        }
-        else if(E_AXIS == fall_edge_axis) {
-          PULSE_STOP(E);
-        }
-        else if(B_AXIS == fall_edge_axis) {
-          PULSE_STOP(B);
-        }
-        fall_edge_axis = -1;
+
+        goto __start;
       }
-      // timer_set_count(STEP_TIMER_DEV, hal_timer_t(0));
-      goto __start;
+      else {
+        timer_set_count(STEP_TIMER_DEV, hal_timer_t(0));
+        HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv));
+        return;
+      }
     }
   }
   else {
@@ -1630,7 +1610,7 @@ __start:
     }
 
     if (-1 != fall_edge_axis) {
-      max_try = 100;
+      max_try = STEPPER_MAX_TRY;
       while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < 2 * STEPPER_TIMER_TICKS_PER_US));
       if (X_AXIS == fall_edge_axis) {
         PULSE_STOP(X);

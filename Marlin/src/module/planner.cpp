@@ -1224,12 +1224,27 @@ bool Planner::has_motion_queue() {
 }
 
 bool Planner::genStep() {
-  bool have_gen = 0;
   uint32_t gc = 0;
   StepInfo step_info;
-  while (!steps_seq.isFull() && (!axis_mng.reqAbort) && (!steps_flag.isFull())) {
-  // while (!steps_seq.isFull() && (!axis_mng.reqAbort)) {
+  // while (!steps_seq.isFull() && (!axis_mng.reqAbort) && (!steps_flag.isFull())) {
+  while ((!steps_seq.isFull()) && (!axis_mng.reqAbort)) {
     if (axis_mng.getNextStep(step_info)) {
+      if (step_info.time_dir.sync || step_info.time_dir.update_file_pos || step_info.time_dir.chg_extruder) {
+        if (!steps_flag.isFull()) {
+          steps_seq.pushQueue(step_info.time_dir);
+          steps_flag.pushQueue(step_info.flag_data);
+        }
+        else {
+          while (steps_flag.isFull() && (!axis_mng.reqAbort)) vTaskDelay(pdMS_TO_TICKS(1));
+          steps_seq.pushQueue(step_info.time_dir);
+          steps_flag.pushQueue(step_info.flag_data);
+        }
+      }
+      else {
+        steps_seq.pushQueue(step_info.time_dir);
+      }
+
+      #if 0
       // LOG_I("PUSH STIF: axis:%u itv:%.3f(ms) dir:%d\r\n", step_info.time_dir.axis, (float)step_info.time_dir.itv * 1000 / STEPPER_TIMER_RATE, step_info.time_dir.dir);
       steps_seq.pushQueue(step_info.time_dir);
       have_gen = true;
@@ -1244,6 +1259,8 @@ bool Planner::genStep() {
         //   #endif
         // }
       }
+      #endif
+
       gc++;
     }
     else {
@@ -1268,7 +1285,7 @@ bool Planner::genStep() {
   //   LOG_I("%u: gc %u %c\n", millis(), gc, steps_seq.isFull() ? 'F' : 'N');
   // }
 
-  return have_gen;
+  return gc;
 }
 
 void Planner::shaped_loop() {
@@ -1368,6 +1385,7 @@ void Planner::shaped_loop() {
   //   }
   // } while(steps_seq.getBufMilliseconds() > 5);
 
+  // Caculation of one step take aboute 8us
   if (genStep())
     has_gen_steps = true;
 

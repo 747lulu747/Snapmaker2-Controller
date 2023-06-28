@@ -26,7 +26,7 @@ struct StepTimeDir{
 
 class StepFlag {
 public:
-  static const uint32_t SIZE = 128;
+  static const uint32_t SIZE = 256;
   struct StepFlagData buf[SIZE];
   volatile uint32_t head;
   volatile uint32_t tail;

@@ -133,7 +133,7 @@ bool MoveQueue::genMoves(block_t* block, bool &drop) {
   file_pos = block->filePos;
   if (accelDistance > EPSILON) {
     Move * am = addMove(entry_speed, cruise_speed, acceleration, accelDistance, axis_r, acc_tick);
-    am->file_pos = file_pos;
+    // am->file_pos = file_pos;
     if (planner.laser_inline.status.isEnabled) {
       am->laser_or_cnc_pwr = block->laser.power;
     }
@@ -157,7 +157,7 @@ bool MoveQueue::genMoves(block_t* block, bool &drop) {
   if (plateau > EPSILON) {
     uint32_t plateau_tick = ms2tick * plateau * i_cruise_speed;
     Move * am = addMove(cruise_speed, cruise_speed, 0, plateau, axis_r, plateau_tick);
-    am->file_pos = file_pos;
+    // am->file_pos = file_pos;
     if (planner.laser_inline.status.isEnabled) {
       am->laser_or_cnc_pwr = block->laser.power;
     }
@@ -179,7 +179,7 @@ bool MoveQueue::genMoves(block_t* block, bool &drop) {
 
   if (decelDistance > EPSILON) {
     Move * am = addMove(cruise_speed, leave_speed, -acceleration, decelDistance, axis_r, decel_tick);
-    am->file_pos = file_pos;
+    // am->file_pos = file_pos;
     if (planner.laser_inline.status.isEnabled) {
       am->laser_or_cnc_pwr = block->laser.power;
     }

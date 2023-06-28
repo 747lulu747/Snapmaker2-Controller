@@ -187,7 +187,7 @@ public:
     return res;
   }
 
-bool moveShaperWindowToNext() {
+  bool moveShaperWindowToNext() {
     shaper_window.lpos = shaper_window.pos;
     shaper_window.ltick = shaper_window.tick;
 
@@ -446,6 +446,8 @@ bool moveShaperWindowToNext() {
         gs.valid = true;
         file_pos = INVALID_FILE_POS;
         tgf.flag &= ~(TimeGenFunc::TGF_FILE_POS_SYNC_FLAG);
+        print_tick = gs.tick;
+        return true;
       }
 
       // Change extruder
@@ -454,6 +456,8 @@ bool moveShaperWindowToNext() {
         gs.valid = true;
         target_extruder = INVALID_EXTRUDER;
         tgf.flag &= ~(TimeGenFunc::TGF_CHG_EXTRUDER);
+        print_tick = gs.tick;
+        return true;
       }
     }
 

@@ -242,7 +242,8 @@ struct step_runout {
   uint32_t sys_time_ms;
 };
 
-#define STEPPER_WAIT_TIME_MS   (100)
+#define STEPPER_WAIT_TIME_MS    (100)
+#define STEPPER_MAX_TRY         (500)
 
 class Stepper {
 
