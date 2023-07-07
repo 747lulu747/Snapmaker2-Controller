@@ -1373,7 +1373,6 @@ void Stepper::ts_isr() {
   HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(HAL_TIMER_TYPE_MAX));
 
 __start:
-  loop_cnt++;
   #ifdef SHAPER_LOG_ENABLE
   HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(HAL_TIMER_TYPE_MAX));
   return;
@@ -1451,10 +1450,10 @@ __start:
         set_directions();
       }
 
-      // DIR TO STEP, delay 62.5 ns
+      // DIR TO STEP time: require 20 ns
+      // STEMP timer one tick time: 1 second / 5M = 200ns
       entry_tick = HAL_timer_get_count(STEP_TIMER_NUM);
-      max_try = STEPPER_MAX_TRY;
-      while ((max_try--) && ((uint16_t)(HAL_timer_get_count(STEP_TIMER_NUM) - entry_tick) < (STEPPER_TIMER_TICKS_PER_US>>4)));
+      while (entry_tick == HAL_timer_get_count(STEP_TIMER_NUM));
 
       entry_tick = HAL_timer_get_count(STEP_TIMER_NUM);
       fall_edge_axis = step_time_dir.axis;
@@ -1559,15 +1558,15 @@ __start:
     // for the low time hole
     entry_tick = HAL_timer_get_count(STEP_TIMER_NUM);
 
-    // 2) HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv)) or HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv) + cur_tick);
-    // 3) limite the continue pluses
+    // continue pluse
     uint16_t cur_tick = HAL_timer_get_count(STEP_TIMER_NUM);
     if ((step_time_dir.itv + step_interval_sum) > (cur_tick + 4 * STEPPER_TIMER_TICKS_PER_US)) {
       HAL_timer_set_compare(STEP_TIMER_NUM, hal_timer_t(step_time_dir.itv + step_interval_sum));
       return;
     }
     else {
-      if (loop_cnt < 10) {
+      // limite the continue pluses
+      if (++loop_cnt < 10) {
         step_interval_sum += step_time_dir.itv;
 
         // make sure the low time
