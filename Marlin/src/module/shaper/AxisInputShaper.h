@@ -20,7 +20,7 @@
 #define INVALID_EXTRUDER              (-1)
 #define EMPTY_MOVE_TIME_TICK          (200 * STEPPER_TIMER_TICKS_PER_MS)
 #define SP_DEFT_TYPE                  (InputShaperType::ei)
-#define SP_DEFT_FREQ                  (50)
+#define SP_DEFT_FREQ                  (100)
 #define SP_DEFT_ZETA                  (0.1)
 #define CALC_OF_BINOMIAL(tgf)         ((tgf.coef_a * tgf.time_wind + tgf.coef_b) * tgf.time_wind)
 #define E_RESET_VALUE                 (1000.0)
@@ -188,14 +188,27 @@ public:
   }
 
   bool moveShaperWindowToNext() {
-    shaper_window.lpos = shaper_window.pos;
-    shaper_window.ltick = shaper_window.tick;
+
+    // do not update in here, update when this shaper window output
+    // shaper_window.lpos = shaper_window.pos;
+    // shaper_window.ltick = shaper_window.tick;
 
     // The closest pluse move to next move
     CalcPluseInfo &cls_p = shaper_window.pluse[shaper_window.t_cls_pls];
     uint8_t cls_p_m_idx = mq->nextMoveIndex(cls_p.m_idx);
 
-    if (InputShaperType::none != type) {
+    if (InputShaperType::none == type) {
+      if (!mq->isBetween(cls_p_m_idx)) {
+        #ifdef SHAPER_LOG_ENABLE
+        // LOG_I("Axis %d move queue is empty, cls_p_m_idx %d\r\n", axis, cls_p_m_idx);
+        #endif
+        if (!no_more_move) {
+          no_more_move = true;
+        }
+        return false;
+      }
+    }
+    else {
       // Shaper axis do NOT support sync in moving as position is not in the correction. Skip the sync move
       do {
         if (!mq->isBetween(cls_p_m_idx)) {
@@ -214,17 +227,6 @@ public:
           break;
         }
       } while(1);
-    }
-    else {
-      if (!mq->isBetween(cls_p_m_idx)) {
-        #ifdef SHAPER_LOG_ENABLE
-        // LOG_I("Axis %d move queue is empty, cls_p_m_idx %d\r\n", axis, cls_p_m_idx);
-        #endif
-        if (!no_more_move) {
-          no_more_move = true;
-        }
-        return false;
-      }
     }
 
     no_more_move = false;
@@ -313,10 +315,10 @@ public:
     tgf_1.coef_a = tgf_coef_a_sum;
 
     if (E_AXIS == axis) {
-      // A sync tgf, no motion, just return
+      // A sync tgf
       if (INVALID_SYNC_POS != sync_pos) {
         tgf_1.flag |= TimeGenFunc::TGF_SYNC_FLAG;
-        return true;
+        ret = true;
       }
 
       // A block file positon sync.
@@ -335,27 +337,31 @@ public:
     float s1 = shaper_window.lpos;
     float s2 = shaper_window.pos;
     float ds = s2 - s1;
-    float dt = (float)shaper_window.wind_tick / ms2tick;
+    // float dt = (float)shaper_window.wind_tick / ms2tick;
+    float dt = (float)(shaper_window.tick - shaper_window.ltick) / ms2tick;
 
-    if (dt < EPSILON || fabs(ds) < EPSILON) {
-      #ifdef SHAPER_LOG_ENABLE
-      LOG_I("ds %f, dt %f\r\n", ds, dt);
-      #endif
+    if (dt < EPSILON) {
+      LOG_I("Axis %d drop a dt %f ms\n", axis, dt);
+      return ret;
+    }
+    
+    if (fabs(ds) < EPSILON) {
       return ret;
     }
 
     tgf_1.coef_b = ds / dt - tgf_1.coef_a * dt;
     if (IS_ZERO(tgf_1.coef_a)) {
       if (IS_ZERO(tgf_1.coef_b)) {
-        LOG_E("### error ###: Remove a const tgf\n");
+        LOG_E("### error ###: Axis %d remove a const tgf\n", axis);
         return ret;
       }
-      tgf_1.monotone = tgf_1.coef_b > 0.0 ? 1 : -1;
+      // tgf_1.monotone = tgf_1.coef_b > 0.0 ? 1 : -1;
       tgf_1.start_tick = shaper_window.ltick;
       tgf_1.end_tick = shaper_window.tick;
       tgf_1.time_wind = dt;
       tgf_1.start_pos = s1;
       tgf_1.end_pos = s2;
+      tgf_1.monotone = s2 > s1 ? 1 : -1;
       tgf_1.flag |= TimeGenFunc::TGF_STEP_FLAG;
       #ifdef SHAPER_LOG_ENABLE
       tgf_1.log(1);
@@ -367,14 +373,15 @@ public:
       t = -b / (2*a)
       */
       float middle_t = -tgf_1.coef_b / (2 * tgf_1.coef_a);
-      if (0 < middle_t && middle_t < dt) {
-        tgf_1.monotone = tgf_1.coef_a > 0.0 ? -1 : 1;
+      if (EPSILON < middle_t && middle_t < dt - EPSILON) {
+        // tgf_1.monotone = tgf_1.coef_a > 0.0 ? -1 : 1;
         tgf_1.start_tick = shaper_window.ltick;
-        tgf_1.end_tick = shaper_window.ltick + middle_t * ms2tick;
+        tgf_1.end_tick = LROUND(shaper_window.ltick + middle_t * ms2tick);
         tgf_1.time_wind = middle_t;
         tgf_1.start_pos = s1;
         float middle_p = CALC_OF_BINOMIAL(tgf_1);
         tgf_1.end_pos = s1 + middle_p;
+        tgf_1.monotone = middle_p > 0.0 ? 1 : -1;
         #ifdef LOG_MIDDLE_POS
         if(axis == X_AXIS)
           axis_mng.tgf_middle_pos_rb.push(fabs(middle_p));
@@ -398,12 +405,13 @@ public:
         #endif
       }
       else {
-        tgf_1.monotone = tgf_1.coef_a > 0.0 ? (middle_t <= 0 ? 1 : -1) : (middle_t <= 0 ? -1 : 1);
+        // tgf_1.monotone = tgf_1.coef_a > 0.0 ? (middle_t <= 0 ? 1 : -1) : (middle_t <= 0 ? -1 : 1);
         tgf_1.start_tick = shaper_window.ltick;
         tgf_1.end_tick = shaper_window.tick;
         tgf_1.time_wind = dt;
         tgf_1.start_pos = s1;
         tgf_1.end_pos = s2;
+        tgf_1.monotone = s2 > s1 ? 1 : -1;
         tgf_1.flag |= TimeGenFunc::TGF_STEP_FLAG;
         #ifdef SHAPER_LOG_ENABLE
         tgf_1.log(1);
@@ -416,6 +424,10 @@ public:
     if (tgf_2.flag) tgf_rb.push(tgf_2);
     #endif
 
+    // update here
+    shaper_window.lpos = shaper_window.pos;
+    shaper_window.ltick = shaper_window.tick;
+
     return true;
   }
 
@@ -427,36 +439,37 @@ public:
     gs.extruder = INVALID_EXTRUDER;
 
     // A sync, no step output
+    // Make that, these no step event timestampe ticks are early to step tick
     if (E_AXIS == axis) {
       gs.file_pos = file_pos;
       gs.sync_pos = sync_pos;
       gs.extruder = target_extruder;
 
       if (tgf.flag & TimeGenFunc::TGF_SYNC_FLAG) {
-        gs.tick = sync_tick;
         gs.valid = true;
         sync_pos = INVALID_SYNC_POS;
+        gs.tick = print_tick = sync_tick;
+        // LOG_I("G92 tick %u\n", gs.tick);
         tgf.flag &= ~(TimeGenFunc::TGF_SYNC_FLAG);
         return true;
       }
 
       // A file position sync
       if (tgf.flag & TimeGenFunc::TGF_FILE_POS_SYNC_FLAG) {
-        gs.tick = block_sync_tick;
         gs.valid = true;
         file_pos = INVALID_FILE_POS;
+        gs.tick = print_tick = block_sync_tick;
+        // LOG_I("block sync tick %u\n", gs.tick);
         tgf.flag &= ~(TimeGenFunc::TGF_FILE_POS_SYNC_FLAG);
-        print_tick = gs.tick;
         return true;
       }
 
       // Change extruder
       if (tgf.flag & TimeGenFunc::TGF_CHG_EXTRUDER) {
-        gs.tick = extruder_chg_tick;
         gs.valid = true;
         target_extruder = INVALID_EXTRUDER;
+        gs.tick = print_tick = extruder_chg_tick;
         tgf.flag &= ~(TimeGenFunc::TGF_CHG_EXTRUDER);
-        print_tick = gs.tick;
         return true;
       }
     }
@@ -468,32 +481,22 @@ public:
       if (tgf.monotone < 0) {
         np = print_pos - mm_per_step;
         ns = print_pos - mm_per_half_step;
-        if (ns < tgf.end_pos) {
+        if (ns < tgf.end_pos - EPSILON) {
           #ifdef SHAPER_LOG_ENABLE
           LOG_I("TGF end: axis %d, PP %f,  SP %f tgf.end_pos %f(%d)\r\n", axis, np, ns, tgf.end_pos, tgf.monotone);
           #endif
           tgf.flag &= ~(TimeGenFunc::TGF_STEP_FLAG);
-          // Update print tick for E when there is just a lot of file sync for E
-          // and the print tick will not update to the right time tick.
-          if (gs.valid) {
-            print_tick = shaper_window.tick;
-          }
           return gs.valid;
         }
       }
       else {
         np = print_pos + mm_per_step;
         ns = print_pos + mm_per_half_step;
-        if (ns > tgf.end_pos) {
+        if (ns > tgf.end_pos + EPSILON) {
           #ifdef SHAPER_LOG_ENABLE
           LOG_I("TGF end: axis %d, PP %f,  SP %f tgf.end_pos %f(%d)\r\n", axis, np, ns, tgf.end_pos, tgf.monotone);
           #endif
           tgf.flag &= ~(TimeGenFunc::TGF_STEP_FLAG);
-          // Update print tick for E when there is just a lot of file sync for E
-          // and the print tick will not update to the right time tick.
-          if (gs.valid) {
-            print_tick = shaper_window.tick;
-          }
           return gs.valid;
         }
       }
@@ -516,9 +519,9 @@ public:
 
     // Update print tick for E when there is just a lot of file sync for E
     // and the print tick will not update to the right time tick.
-    if (gs.valid && !gs.out_step) {
-      print_tick = gs.tick;
-    }
+    // if (gs.valid && !gs.out_step) {
+    //   print_tick = gs.tick;
+    // }
 
     return gs.valid;
   }
@@ -544,20 +547,16 @@ public:
             return genNextStep(gs);
           }
           else {
-            // If generateShapedFuncParams return false, means no more motion
-            // print_tick and position update to shaper_window
-            print_tick = shaper_window.tick;
-            print_pos = shaper_window.pos;
+            // LOG_I("Axis %d drop a ds %f mm\n", axis, ds);
+            // A adding empty move may generating any steps as position keep
+            // the same. If a adding emtpy move doest not generate steps, than
+            // the print tick remain on the last move. This will cause
+            // planner::synchronization halt. no more move, we need to update the print_tick.
+            // But not update the position
+            print_tick = shaper_window.ltick = shaper_window.tick;
           }
         }
         else {
-          // A adding empty move may generating any steps as position keep
-          // the same. If a adding emtpy move doest not generate steps, than
-          // the print tick remain on the last move. This will cause
-          // planner::synchronization halt. So when moveShaperWindowToNext()
-          // return false, no more move, we need to update the print_tick.
-          // But not update the position
-          print_tick = shaper_window.tick;
           gs.valid = false;
           return false;
         }
@@ -593,11 +592,13 @@ public:
       }
     }
 
+    //
     if (g1.valid && g2.valid && (g1.dir != g2.dir) && (g1.out_step && g2.out_step)) {
       g1.out_step = g2.out_step = false;
       #ifdef SHAPER_LOG_ENABLE
       LOG_I("Abolish steps: axis %d\n", axis);
       #endif
+      return getStep();
     }
 
     return g1.valid;
@@ -621,7 +622,9 @@ public:
   CRITICAL void logShaperWindows();
   CRITICAL bool tgfValid();
   CRITICAL void abort();
+  CRITICAL bool OnTargetPosition(float tp[]);
   CRITICAL void updateOldestPluesTick();
+  CRITICAL void updateOldestPluesMoveIndex();
   CRITICAL bool req_endisable_shaper(bool endisble);
   CRITICAL bool req_update_shaper(void);
   CRITICAL bool req_reset_shaper(void);
@@ -653,7 +656,7 @@ public:
     AxisInputShaper *dm = findNearestPrintTickAxis();
     if (dm) {
       if (PENDING(dm->g1.tick, cur_print_tick)) {
-        LOG_E("### ERROR ####: cur print tick < last print tick %d\r\n", int(cur_print_tick - dm->g1.tick));
+        LOG_E("### ERROR ####: cur print tick < last print tick %d in axis %d\r\n", int(cur_print_tick - dm->g1.tick), dm->axis);
         dm->g1.tick = cur_print_tick;
       }
 
@@ -706,6 +709,7 @@ public:
   AxisInputShaper axes[NUM_AXIS];
   uint32_t cur_print_tick;
   uint32_t oldest_plues_tick;
+  uint8_t oldest_plues_move_index;
   MoveQueue *mq;
   bool reqAbort;
   uint32_t ms2tick;

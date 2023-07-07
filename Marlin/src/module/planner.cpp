@@ -107,6 +107,7 @@ Planner planner;
 uint32_t statistics_slowdown_cnt = 0;
 bool Planner::req_clear_block_flag = false;
 struct planner_schedule_info planner_sch_info;
+circular_buffer<uint8_t> Planner::got_un_optimized_block_rb;
 
   // public:
 
@@ -726,6 +727,7 @@ void Planner::calculate_trapezoid_for_block(block_t * const block, const float &
 
   float smoothed_cruise_speed_sqr = MAX(entry_speed_sqr, exit_speed_sqr, (entry_speed_sqr + exit_speed_sqr + 2 * block->acceleration_to_deceleration * block->millimeters) * 0.5);
   block->cruise_speed = SQRT(MIN(block->nominal_speed_sqr, smoothed_cruise_speed_sqr));
+  // block->cruise_speed = SQRT(block->nominal_speed_sqr);
 
   // 747 debug log
   // LOG_I("entry_speed_sqr %f, exit_speed_sqr %f, acceleration_to_deceleration %f", entry_speed_sqr, exit_speed_sqr, block->acceleration_to_deceleration);
@@ -1210,16 +1212,24 @@ void Planner::do_block_clear() {
 }
 
 bool Planner::has_motion_queue() {
-  if (xTaskGetCurrentTaskHandle() == sm2_handle->planner) {
-    axis_mng.updateOldestPluesTick();
-    move_queue.moveTailForward(axis_mng.oldest_plues_tick);
-  }
+  // move queue recycle do in planner
+  // if (xTaskGetCurrentTaskHandle() == sm2_handle->planner) {
+  //   axis_mng.updateOldestPluesTick();
+  //   move_queue.moveTailForward(axis_mng.oldest_plues_tick);
+  // }
 
-  if (move_queue.haveMotion() || axis_mng.tgfValid() || steps_seq.count()) {
+  // if (move_queue.haveMotion() || axis_mng.tgfValid() || steps_seq.count()) {
+  // if (move_queue.getMoveSize() > 2 || axis_mng.tgfValid() || steps_seq.count()) {
+  if (axis_mng.tgfValid() || steps_seq.count()) {
     return true;
   }
   else {
-    return false;
+    float tp[NUM_AXIS];
+    move_queue.getMoveQueueTargetPosition(tp);
+    if (axis_mng.OnTargetPosition(tp))
+      return false;
+    else
+      return true;
   }
 }
 
@@ -1288,6 +1298,8 @@ bool Planner::genStep() {
   return gc;
 }
 
+// Each step calculation take about 8us, 2ms prepare is enought?
+#define MIN_PREPARE_STEP_TIMS_MS    (2)
 void Planner::shaped_loop() {
 
   uint8_t block_num;
@@ -1296,15 +1308,12 @@ void Planner::shaped_loop() {
   bool drop;
 
   planner_sch_info.entry_cnt++;
-
   axis_mng.updateOldestPluesTick();
   move_queue.moveTailForward(axis_mng.oldest_plues_tick);
-
-  // if (genStep())
-  //   has_gen_steps = true;
+  // axis_mng.updateOldestPluesMoveIndex();
+  // move_queue.move_tail = axis_mng.oldest_plues_move_index;
 
   axis_mng.loop();
-
   if (axis_mng.reqAbort) {
     if (!Planner::req_clear_block()) {
       LOG_E("req block clear failed\n");
@@ -1320,8 +1329,11 @@ void Planner::shaped_loop() {
     // Have no more optimal block
     if (block_buffer_nonbusy == block_buffer_planned) {
       // Steps will runout in a few millisecond, just take this block. If 5 millisecond can product new steps?
-      if (steps_seq.getBufMilliseconds() < 5) {
+      if (steps_seq.getBufMilliseconds() < MIN_PREPARE_STEP_TIMS_MS) {
         bt = get_current_block();
+        if (bt) {
+          got_un_optimized_block_rb.push(1);
+        }
       }
     }
     // Just take this block as this block has been optimaled.
@@ -1333,6 +1345,8 @@ void Planner::shaped_loop() {
   if (bt) {
     axis_mng.updateOldestPluesTick();
     move_queue.moveTailForward(axis_mng.oldest_plues_tick);
+    // axis_mng.updateOldestPluesMoveIndex();
+    // move_queue.move_tail = axis_mng.oldest_plues_move_index;
     if (move_queue.genMoves(bt, drop)) {
       discard_current_block();
       bt = nullptr;
@@ -1349,41 +1363,6 @@ void Planner::shaped_loop() {
       }
     }
   }
-
-  // do {
-  //   block_num = movesplanned();
-  //   if (!bt && block_num) {
-  //     // Have no more optimal block
-  //     if (block_buffer_nonbusy == block_buffer_planned) {
-  //       // Steps will runout in a few millisecond, just take this block. If 5 millisecond can product new steps?
-  //       if (steps_seq.getBufMilliseconds() < 20) {
-  //         bt = get_current_block();
-  //       }
-  //     }
-  //     // Just take this block as this block has been optimaled.
-  //     else {
-  //       bt = get_current_block();
-  //     }
-  //   }
-  //   if (bt) {
-  //     axis_mng.updateOldestPluesTick();
-  //     move_queue.moveTailForward(axis_mng.oldest_plues_tick);
-  //     if (move_queue.genMoves(bt)) {
-  //       discard_current_block();
-  //       bt = nullptr;
-  //       step_generating = true;
-  //       #ifdef SHAPER_LOG_ENABLE
-  //       move_queue.log();
-  //       #endif
-  //     }
-  //     else {
-  //       break;
-  //     }
-  //   }
-  //   else {
-  //     break;
-  //   }
-  // } while(steps_seq.getBufMilliseconds() > 5);
 
   // Caculation of one step take aboute 8us
   if (genStep())
@@ -1411,15 +1390,12 @@ void Planner::shaped_loop() {
   // No block, no activeDM and steps will runout, add a empty move
   if (axis_mng.endisable &&
       step_generating &&
-      steps_seq.getBufMilliseconds() < 5)
+      !block_num &&
+      !bt &&
+      steps_seq.getBufMilliseconds() < MIN_PREPARE_STEP_TIMS_MS &&
+      move_queue.getFreeMoveSize())
   {
-    while(move_queue.getFreeMoveSize() < 1) {
-      axis_mng.updateOldestPluesTick();
-      move_queue.moveTailForward(axis_mng.oldest_plues_tick);
-      genStep();
-      LOG_I("wait for move room for adding a empty move\n");
-    }
-    // LOG_I("### No more motion, add a empty move for shaper finish\r\n");
+    LOG_I("### No more motion, add a empty move for shaper finish\r\n");
     if (axis_mng.max_shaper_window_tick)
       move_queue.addEmptyMove(1.1 * axis_mng.max_shaper_window_tick);
     else
@@ -1433,10 +1409,11 @@ void Planner::shaped_loop() {
   block_num = movesplanned();
   if (step_generating) {
     uint32_t prepare_time_ms = steps_seq.getBufMilliseconds();
-    if (prepare_time_ms > 10) {
+    if (prepare_time_ms > MIN_PREPARE_STEP_TIMS_MS) {
       // NOMORE(prepare_time_ms, 50u);
       // vTaskDelay(pdMS_TO_TICKS(prepare_time_ms - 5));
-      vTaskDelay(pdMS_TO_TICKS(prepare_time_ms/2));
+      // vTaskDelay(pdMS_TO_TICKS(prepare_time_ms/2));
+      vTaskDelay(pdMS_TO_TICKS(prepare_time_ms - MIN_PREPARE_STEP_TIMS_MS));
     }
     else {
       if (has_gen_steps && block_num) {
@@ -1445,6 +1422,7 @@ void Planner::shaped_loop() {
       }
       else {
         // Can not make any more steps just delay
+        // LOG_I("w");
         vTaskDelay(pdMS_TO_TICKS(1));
       }
     }
@@ -2252,7 +2230,8 @@ bool Planner::_populate_block(block_t * const block, bool split_move,
      * should *never* remove steps!
      */
     #if ENABLED(BACKLASH_COMPENSATION)
-      add_backlash_correction_steps(dx, dy, dz, db, dm, block);
+      // Comment by 747 for test
+      // add_backlash_correction_steps(dx, dy, dz, db, dm, block);
     #endif
   }
 
@@ -2267,7 +2246,7 @@ bool Planner::_populate_block(block_t * const block, bool split_move,
       block->axis_r[X_AXIS]= dx / block->millimeters;
       block->axis_r[Y_AXIS]= dy / block->millimeters;
       block->axis_r[Z_AXIS]= dz / block->millimeters;
-      block->axis_r[B_AXIS] = db / block->millimeters;;
+      block->axis_r[B_AXIS]= db / block->millimeters;;
       block->axis_r[E_AXIS]= e_factor[extruder] * de / block->millimeters;
       // 747_err
       // flow_control_e_delta += (de * e_factor[extruder] - de);
@@ -2708,7 +2687,8 @@ bool Planner::_populate_block(block_t * const block, bool split_move,
   // LOG_I("accel %d\n", accel);
   block->acceleration_steps_per_s2 = accel;
   block->acceleration = accel / steps_per_mm;
-  block->acceleration_to_deceleration = block->acceleration * 0.5;
+  // block->acceleration_to_deceleration = block->acceleration * 0.5;
+  block->acceleration_to_deceleration = block->acceleration;
 
   // 747_err
   // if (settings.acceleration_to_deceleration_ratio > 20) {
@@ -3363,4 +3343,3 @@ block_t* Planner::get_current_block() {
 
   return NULL;
 }
-

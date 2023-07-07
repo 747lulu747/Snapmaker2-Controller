@@ -31,6 +31,7 @@
  */
 
 #include "../Marlin.h"
+#include "./shaper/CircularBuffer.h"
 
 #include "motion.h"
 #include "../gcode/queue.h"
@@ -300,6 +301,8 @@ class Planner {
     static laser_state_t laser_inline;
 
     static bool req_clear_block_flag;
+
+    static circular_buffer<uint8_t> got_un_optimized_block_rb;
 
     static uint32_t max_acceleration_steps_per_s2[X_TO_EN]; // (steps/s^2) Derived from mm_per_s2
     static float steps_to_mm[X_TO_EN];          // Millimeters per step

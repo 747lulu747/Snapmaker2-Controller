@@ -220,7 +220,7 @@ void AxisInputShaper::shaper_init(InputShaperType type, float frequency, float z
 void AxisInputShaper::reset() {
   tgf_1.flag = tgf_2.flag = 0;
   g1.valid = g2.valid = false;
-  print_tick = 0;
+  print_tick = START_TICK;
   print_pos = 0.0;
   delta_e = 0.0;
   sync_pos = INVALID_SYNC_POS;
@@ -241,8 +241,8 @@ bool AxisInputShaper::prepare(int m_idx) {
 
   calcShaperWindowEndPosAndTime();
   if (!generateShapedFuncParams()){
-    print_tick = shaper_window.tick;
-    print_pos = shaper_window.pos;
+    print_tick = shaper_window.ltick = shaper_window.tick;
+    // print_pos = shaper_window.pos;
   }
 
   return getStep();
@@ -575,6 +575,15 @@ void AxisMng::abort() {
   axis_mng.prepare(move_queue.move_tail);
 }
 
+bool AxisMng::OnTargetPosition(float tp[]) {
+  LOOP_SHAPER_AXES(i) {
+    if (fabs(axes[i].shaper_window.pos - tp[i]) > 0.1) { // step
+      return false;
+    }
+  }
+  return true;
+}
+
 void AxisMng::updateOldestPluesTick() {
   if (!is_init)
     return;
@@ -588,6 +597,28 @@ void AxisMng::updateOldestPluesTick() {
     }
   }
   oldest_plues_tick = opt;
+}
+
+void AxisMng::updateOldestPluesMoveIndex() {
+  if (!is_init)
+    return;
+
+  uint8_t opm;
+  uint8_t left_plues_move_index;
+  LOOP_SHAPER_AXES(i) {
+    left_plues_move_index = axes[i].shaper_window.pluse[0].m_idx;
+    if (0 == i)
+      opm = left_plues_move_index;
+    else {
+      int diff = left_plues_move_index - opm;
+      if (abs(diff) > (MOVE_SIZE>>1))
+        diff -= MOVE_SIZE;
+      if ((diff%MOVE_SIZE) < 0) {
+        opm = left_plues_move_index;
+      }
+    }
+  }
+  oldest_plues_move_index = opm;  
 }
 
 bool AxisMng::req_endisable_shaper(bool endisable) {
