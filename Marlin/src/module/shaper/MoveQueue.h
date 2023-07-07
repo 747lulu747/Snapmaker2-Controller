@@ -10,6 +10,7 @@
 #define RB_IS_EMPTY(h, t)           ((h) == (t))
 #define EMPTY_TIME                  100
 #define SAFE_ISOLATION_TIME_STRIP   (0)
+#define LOOP_SHAPER_AXES(VAR)       LOOP_S_L_N(VAR, 0, NUM_AXIS)
 
 
 class Move {
@@ -45,8 +46,8 @@ public:
   MoveQueue();
   void init(uint32_t s2t);
   CRITICAL void update_shaper_param(uint32_t mswt, uint32_t mswrdt);
-  FORCE_INLINE constexpr uint8_t nextMoveIndex(const uint8_t m_index) { return MOVE_MOD(m_index + 1);};
-  FORCE_INLINE constexpr uint8_t prevMoveIndex(const uint8_t m_index) { return MOVE_MOD(m_index - 1);};
+  FORCE_INLINE constexpr static uint8_t nextMoveIndex(const uint8_t m_index) { return MOVE_MOD(m_index + 1);};
+  FORCE_INLINE constexpr static uint8_t prevMoveIndex(const uint8_t m_index) { return MOVE_MOD(m_index - 1);};
   FORCE_INLINE bool isBetween(const uint8_t m_index) { return (m_index != move_head) && (MOVE_MOD(move_head - m_index) + MOVE_MOD(m_index - move_tail)) == MOVE_MOD(move_head - move_tail);};
   FORCE_INLINE int getMoveSize() { return MOVE_MOD(move_head - move_tail); };
   FORCE_INLINE int getFreeMoveSize() { return MOVE_SIZE - 1 - getMoveSize(); }
@@ -56,6 +57,11 @@ public:
     float delta_time = (float)(tick - move.start_tick) / ms2tick;
     return move.start_pos[axis] + (move.start_v + 0.5f * move.accelerate * delta_time) * delta_time * axis_r;
   };
+  FORCE_INLINE void getMoveQueueTargetPosition(float tp[]) {
+    LOOP_SHAPER_AXES(i) {
+      tp[i] = last_mq_pos[i];
+    }
+  }
 
   CRITICAL void reset();
   CRITICAL void addEmptyMove(uint32_t time);

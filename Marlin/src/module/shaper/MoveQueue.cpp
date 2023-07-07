@@ -74,7 +74,7 @@ bool MoveQueue::genMoves(block_t* block, bool &drop) {
 
   if (cruise_speed < EPSILON) {
     LOG_I("A zero speed block has no move\r\n");
-    return false;
+    return true;
   }
 
   float i_cruise_speed = 1000.0f / block->cruise_speed;
@@ -90,8 +90,8 @@ bool MoveQueue::genMoves(block_t* block, bool &drop) {
     decelDistance = 0;
   }
 
-  uint32_t acc_tick = ms2tick * (cruise_speed - entry_speed) * i_acceleration;
-  uint32_t decel_tick = ms2tick * (cruise_speed - leave_speed) * i_acceleration;
+  uint32_t acc_tick = LROUND(ms2tick * (cruise_speed - entry_speed) * i_acceleration);
+  uint32_t decel_tick = LROUND(ms2tick * (cruise_speed - leave_speed) * i_acceleration);
   float plateau = millimeters - accelDistance - decelDistance;
   if (plateau < 0) {
     float newAccelDistance = Planner::intersection_distance(entry_speed, leave_speed, acceleration, millimeters);
@@ -111,9 +111,9 @@ bool MoveQueue::genMoves(block_t* block, bool &drop) {
       cruise_speed = leave_speed;
     }
     i_cruise_speed = 1 / cruise_speed;
-    acc_tick = ms2tick * (cruise_speed - entry_speed) * i_acceleration;
+    acc_tick = LROUND(ms2tick * (cruise_speed - entry_speed) * i_acceleration);
     decelDistance = millimeters - accelDistance;
-    decel_tick = ms2tick * (cruise_speed - leave_speed) * i_acceleration;
+    decel_tick = LROUND(ms2tick * (cruise_speed - leave_speed) * i_acceleration);
     plateau = 0;
   }
 
@@ -155,7 +155,7 @@ bool MoveQueue::genMoves(block_t* block, bool &drop) {
   }
 
   if (plateau > EPSILON) {
-    uint32_t plateau_tick = ms2tick * plateau * i_cruise_speed;
+    uint32_t plateau_tick = LROUND(ms2tick * plateau * i_cruise_speed);
     Move * am = addMove(cruise_speed, cruise_speed, 0, plateau, axis_r, plateau_tick);
     // am->file_pos = file_pos;
     if (planner.laser_inline.status.isEnabled) {
@@ -277,6 +277,7 @@ void MoveQueue::moveTailForward(uint32_t print_tick) {
     LOG_I("MT to %d\r\n", move_tail);
     #endif
   }
+  
   moves_tail_tick = moves[move_tail].start_tick;
   if ((moves_head_tick - moves_tail_tick) < max_shape_window_tick && getMoveSize() > MOVE_SIZE - 5) {
     LOG_E("#### Move queue spend tick < max shaper window tick\n");
@@ -302,7 +303,7 @@ bool MoveQueue::haveMotion() {
 
   uint8_t h_idx = prevMoveIndex(move_head);
   for (int i = 0; i < NUM_AXIS; i++) {
-    if (moves[move_tail].start_pos[i] != moves[h_idx].end_pos[i])
+    if (fabs(moves[move_tail].start_pos[i] - moves[h_idx].end_pos[i]) > EPSILON)
       return true;
   }
 
