@@ -345,6 +345,11 @@ void motion_info_log(void) {
     if (Stepper::file_pos_rb.pop(file_pos)) {
       LOG_I("### Pause file position: %u\n", file_pos);
     }
+
+    uint8_t gupb;
+    if (Planner::got_un_optimized_block_rb.pop(gupb)) {
+      LOG_I("Take a un-optimized block\n");
+    }
   }
 
 }
