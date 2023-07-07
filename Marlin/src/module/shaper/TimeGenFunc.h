@@ -34,8 +34,10 @@ public:
     }
 
     float sqrt_d = coef_b * coef_b - 4 * coef_a * c;
-    if (sqrt_d < 0.0)
+    if (sqrt_d < 0.0) {
+      LOG_E("### error ###: delta < 0.0\n");
       sqrt_d = 0;
+    }
 
     float d = SQRT(sqrt_d);
     if (monotone < 0) {
